@@ -205,7 +205,7 @@ function DraggableImage({
         >
           {isEditing && (
             <div className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group">
-              <div className={`relative w-full h-[calc(100%-80px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
+              <div className={`relative w-full h-[calc(100%-40px)] mb-2 ${frameStyle === 'people' ? 'rounded-full' : ''}`}>
                 <div
                   style={{
                     clipPath: getClipPath(),
@@ -219,33 +219,33 @@ function DraggableImage({
                     className="object-cover shadow-lg"
                   />
                 </div>
-                <div className="absolute -bottom-20 left-1/2 transform -translate-x-1/2 w-full flex flex-col items-center gap-2">
-                  <div className="flex flex-wrap gap-1.5 justify-center">
-                    {image.keywords.map((keyword, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-block px-2 py-0.5 text-sm font-medium text-gray-700 bg-white/90 backdrop-blur-sm rounded-full shadow-sm"
-                      >
-                        #{keyword}
-                      </span>
-                    ))}
-                  </div>
-                  <button 
-                    className="flex items-center justify-center gap-1.5 py-1.5 px-4 min-w-[120px] bg-white/90 backdrop-blur-sm rounded-full hover:bg-white shadow-sm transition-colors"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowImageModal(true);
-                    }}
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span className="text-sm font-medium">이미지 변경</span>
-                  </button>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-wrap gap-1 justify-center">
+                  {image.keywords.map((keyword, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-block px-2 py-0.5 text-sm font-medium text-gray-700 bg-white/90 backdrop-blur-sm rounded-full shadow-sm"
+                    >
+                      #{keyword}
+                    </span>
+                  ))}
                 </div>
+                <button 
+                  className="flex items-center justify-center gap-1.5 py-1 px-3 min-w-[100px] bg-white/90 backdrop-blur-sm rounded-full hover:bg-white shadow-sm transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowImageModal(true);
+                  }}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span className="text-sm font-medium">이미지 변경</span>
+                </button>
               </div>
             </div>
           )}
