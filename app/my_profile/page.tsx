@@ -59,27 +59,46 @@ type ImageData = {
 type HistoryData = {
   timestamp: number;
   positions: Record<string, Position>;
+  frameStyles: Record<string, 'healing' | 'inspiration' | 'people' | 'interest'>;
+  images: ImageData[];
+};
+
+type UnsplashImage = {
+  id: string;
+  urls: {
+    regular: string;
+  };
+  alt_description: string;
+};
+
+type DraggableImageProps = {
+  image: ImageData;
+  position?: Position;
+  isEditing: boolean;
+  positions: Record<string, Position>;
+  frameStyle: 'healing' | 'inspiration' | 'people' | 'interest';
+  onFrameStyleChange: (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => void;
+  onImageChange: (id: string, newSrc: string, newAlt: string) => void;
 };
 
 function DraggableImage({ 
   image, 
   position, 
   isEditing,
-  positions 
-}: { 
-  image: ImageData; 
-  position?: Position; 
-  isEditing: boolean;
-  positions: Record<string, Position>;
-}) {
+  positions,
+  frameStyle,
+  onFrameStyleChange,
+  onImageChange,
+}: DraggableImageProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: image.id,
     disabled: !isEditing,
   });
 
   const [watchedVideos, setWatchedVideos] = useState<string[]>([]);
-  const [frameStyle, setFrameStyle] = useState<'healing' | 'inspiration' | 'people' | 'interest'>('healing');
   const [showImageModal, setShowImageModal] = useState(false);
+  const [alternativeImages, setAlternativeImages] = useState<UnsplashImage[]>([]);
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(${image.rotate}deg)`,
@@ -180,6 +199,102 @@ function DraggableImage({
       
       // 시청한 영상 목록 업데이트
       setWatchedVideos(prev => [...prev, video.embedId]);
+    }
+  };
+
+  const handleFrameStyleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onFrameStyleChange(image.id, e.target.value as 'healing' | 'inspiration' | 'people' | 'interest');
+  };
+
+  // Unsplash 이미지 검색 함수
+  const fetchAlternativeImages = async () => {
+    setIsLoadingImages(true);
+    try {
+      if (!process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY) {
+        throw new Error('Unsplash API key is not configured');
+      }
+
+      const keywordMap = {
+        '따뜻한': ['warm', 'cozy', 'sunlight', 'morning'],
+        '가족': ['family', 'together', 'home', 'love'],
+        '일상': ['daily', 'lifestyle', 'life', 'moment'],
+        '감성': ['mood', 'emotional', 'aesthetic', 'atmosphere'],
+        '포토': ['photo', 'photography', 'camera', 'picture'],
+        '힐링': ['healing', 'peaceful', 'calm', 'relax'],
+        '여유': ['relaxing', 'leisure', 'slow', 'peace'],
+        '휴식': ['rest', 'break', 'comfort', 'quiet'],
+        '밤': ['night', 'evening', 'dark', 'moonlight'],
+        '자연': ['nature', 'outdoor', 'natural', 'landscape'],
+        '풍경': ['landscape', 'scenery', 'view', 'scenic'],
+        '평화': ['peaceful', 'tranquil', 'serene', 'harmony'],
+        '아늑함': ['cozy', 'comfortable', 'snug', 'warm'],
+        '집': ['home', 'house', 'interior', 'living'],
+        '편안': ['comfort', 'comfortable', 'relaxed', 'ease'],
+        '추억': ['memories', 'nostalgia', 'vintage', 'moment'],
+        '기록': ['diary', 'journal', 'record', 'document']
+      };
+
+      const firstKeyword = image.keywords[0];
+      // 키워드 배열에서 랜덤하게 2개 선택
+      const keywordOptions = keywordMap[firstKeyword] || ['mood'];
+      const randomKeywords = keywordOptions
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 2)
+        .join(' ');
+
+      // 페이지 번호도 랜덤하게 설정 (1~5 페이지 중 랜덤)
+      const randomPage = Math.floor(Math.random() * 5) + 1;
+
+      const response = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(randomKeywords)}&per_page=4&page=${randomPage}&orientation=landscape`,
+        {
+          headers: {
+            'Authorization': `Client-ID ${process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY}`,
+            'Accept-Version': 'v1'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Search results:', data);
+      
+      // 결과도 랜덤하게 섞기
+      const shuffledResults = data.results
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 4);
+      
+      setAlternativeImages(shuffledResults);
+    } catch (error) {
+      console.error('Failed to fetch images:', error);
+    } finally {
+      setIsLoadingImages(false);
+    }
+  };
+
+  // 이미지 모달이 열릴 때 이미지 검색
+  useEffect(() => {
+    if (showImageModal) {
+      fetchAlternativeImages();
+    }
+  }, [showImageModal]);
+
+  // 이미지 선택 핸들러도 수정
+  const handleImageSelect = async (selectedImage: UnsplashImage) => {
+    try {
+      const newSrc = selectedImage.urls.regular;
+      const newAlt = selectedImage.alt_description || image.alt;
+      
+      // 부모 컴포넌트의 이미지 변경 함수 호출
+      onImageChange(image.id, newSrc, newAlt);
+      
+      setShowImageModal(false);
+    } catch (error) {
+      console.error('Failed to update image:', error);
     }
   };
 
@@ -287,7 +402,7 @@ function DraggableImage({
               <select 
                 className="text-sm border-none bg-transparent outline-none cursor-pointer"
                 value={frameStyle}
-                onChange={(e) => setFrameStyle(e.target.value as 'healing' | 'inspiration' | 'people' | 'interest')}
+                onChange={handleFrameStyleChange}
                 onClick={(e) => e.stopPropagation()}
               >
                 <option value="healing">⬛️ 나에게 힐링이 되는 영상</option>
@@ -475,32 +590,78 @@ function DraggableImage({
       </Sheet>
 
       {showImageModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowImageModal(false)}>
-          <div className="bg-white rounded-lg p-6 max-w-[300px] w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">이미지 변경</h3>
-              <button onClick={() => setShowImageModal(false)} className="text-gray-500 hover:text-gray-700">
-                ✕
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="relative aspect-square rounded-lg overflow-hidden">
-                <Image
-                  src={image.src}
-                  alt="현재 이미지"
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                  <span className="text-white font-medium">현재 이미지</span>
+        <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
+          <DialogContent className="max-w-[80vw] w-[80vw] min-w-[80vw] max-h-[80vh] h-[80vh] min-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>이미지 변경</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-12 gap-6 h-[calc(100%-60px)]">
+              {/* 기존 이미지 (좌측) - 50% 크기로 조정 */}
+              <div className="col-span-6 flex items-center justify-center">
+                <div className="w-[80%] aspect-square relative rounded-lg overflow-hidden border-2 border-blue-500 shadow-lg">
+                  <Image
+                    src={image.src}
+                    alt="현재 이미지"
+                    fill
+                    className="object-cover"
+                  />
                 </div>
               </div>
-              <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors cursor-pointer">
-                <span className="text-gray-500">새 이미지 선택</span>
+
+              {/* 새 이미지 선택 옵션 (우측) - 50% 영역에 4개 이미지 배치 */}
+              <div className="col-span-6 space-y-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-base font-medium text-gray-700">새 이미지 선택</p>
+                  <button
+                    onClick={() => fetchAlternativeImages()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    새로 검색
+                  </button>
+                </div>
+                {isLoadingImages ? (
+                  <div className="grid grid-cols-2 gap-4 p-4">
+                    {[1, 2, 3, 4].map((_, index) => (
+                      <div key={index} className="aspect-square bg-gray-100 animate-pulse rounded-lg" />
+                    ))}
+                  </div>
+                ) : alternativeImages && alternativeImages.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4 p-4">
+                    {alternativeImages.map((altImage) => (
+                      <div 
+                        key={altImage.id}
+                        className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-colors cursor-pointer group shadow-md"
+                        onClick={() => handleImageSelect(altImage)}
+                      >
+                        <Image
+                          src={altImage.urls.regular}
+                          alt={altImage.alt_description || '대체 이미지'}
+                          fill
+                          className="object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full font-medium hover:bg-white transition-colors">
+                            선택하기
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">검색된 이미지가 없습니다.</p>
+                  </div>
+                )}
+                <div className="bg-blue-50 rounded-lg p-4 mt-4">
+                  <p className="text-sm text-blue-600">
+                    * 현재 키워드 ({image.keywords.join(', ')})에 맞는 이미지를 보여드립니다.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
@@ -516,94 +677,12 @@ declare global {
 
 export default function MyProfilePage() {
   const [positions, setPositions] = useState<Record<string, Position>>({});
+  const [frameStyles, setFrameStyles] = useState<Record<string, 'healing' | 'inspiration' | 'people' | 'interest'>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [histories, setHistories] = useState<HistoryData[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  // 컴포넌트 마운트 시 저장된 히스토리 불러오기 및 최근 위치 설정
-  useEffect(() => {
-    const savedHistories = localStorage.getItem('moodboardHistories');
-    if (savedHistories) {
-      const parsedHistories = JSON.parse(savedHistories);
-      setHistories(parsedHistories);
-      
-      // 가장 최근 히스토리의 위치로 설정
-      if (parsedHistories.length > 0) {
-        const latestHistory = parsedHistories[parsedHistories.length - 1];
-        setPositions(latestHistory.positions);
-        setCurrentHistoryIndex(parsedHistories.length - 1);
-      }
-    }
-  }, []);
-
-  // 히스토리 재생 효과
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
-    if (isPlaying && histories.length > 0) {
-      intervalId = setInterval(() => {
-        setCurrentHistoryIndex(prev => {
-          const nextIndex = prev + 1;
-          if (nextIndex >= histories.length) {
-            setIsPlaying(false);
-            return prev;
-          }
-          setPositions(histories[nextIndex].positions);
-          return nextIndex;
-        });
-      }, 2000); // 2초마다 다음 히스토리로 전환 (애니메이션 시간 고려)
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isPlaying, histories]);
-
-  const handleSave = () => {
-    const newHistory: HistoryData = {
-      timestamp: Date.now(),
-      positions: positions
-    };
-
-    const updatedHistories = [...histories, newHistory];
-    setHistories(updatedHistories);
-    localStorage.setItem('moodboardHistories', JSON.stringify(updatedHistories));
-    setCurrentHistoryIndex(updatedHistories.length - 1);
-    setIsEditing(false);
-  };
-
-  const handleHistoryClick = (index: number) => {
-    if (currentHistoryIndex === index) return;
-    setCurrentHistoryIndex(index);
-    setPositions(histories[index].positions);
-  };
-
-  const handlePlayHistory = () => {
-    if (histories.length > 0) {
-      setCurrentHistoryIndex(0);
-      setPositions(histories[0].positions);
-      setIsPlaying(true);
-    }
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    if (!isEditing) return;
-    
-    const { active, delta } = event;
-    setPositions(prev => {
-      const oldPosition = prev[active.id] || { x: 0, y: 0 };
-      return {
-        ...prev,
-        [active.id]: {
-          x: oldPosition.x + delta.x,
-          y: oldPosition.y + delta.y,
-        },
-      };
-    });
-  };
-
-  const images: ImageData[] = [
+  const [images, setImages] = useState<ImageData[]>([
     {
       id: "1",
       src: "https://images.unsplash.com/photo-1611516491426-03025e6043c8",
@@ -754,7 +833,146 @@ export default function MyProfilePage() {
         }
       ]
     }
-  ];
+  ]);
+
+  // 컴포넌트 마운트 시 저장된 히스토리 불러오기 및 최근 위치 설정
+  useEffect(() => {
+    const savedHistories = localStorage.getItem('moodboardHistories');
+    if (savedHistories) {
+      const parsedHistories = JSON.parse(savedHistories);
+      // 기존 히스토리 데이터 마이그레이션
+      const migratedHistories = parsedHistories.map((history: HistoryData) => ({
+        ...history,
+        images: history.images || images // 이미지 배열이 없으면 현재 이미지 사용
+      }));
+      
+      setHistories(migratedHistories);
+      
+      if (migratedHistories.length > 0) {
+        const latestHistory = migratedHistories[migratedHistories.length - 1];
+        setPositions(latestHistory.positions);
+        setCurrentHistoryIndex(migratedHistories.length - 1);
+        setFrameStyles(latestHistory.frameStyles || {});
+        if (latestHistory.images && latestHistory.images.length > 0) {
+          setImages(latestHistory.images);
+        }
+      }
+      // 마이그레이션된 데이터 저장
+      localStorage.setItem('moodboardHistories', JSON.stringify(migratedHistories));
+    } else {
+      // 초기 히스토리 생성
+      const initialHistory: HistoryData = {
+        timestamp: Date.now(),
+        positions: positions,
+        frameStyles: frameStyles,
+        images: images
+      };
+      setHistories([initialHistory]);
+      localStorage.setItem('moodboardHistories', JSON.stringify([initialHistory]));
+      setCurrentHistoryIndex(0);
+    }
+  }, []);
+
+  // 히스토리 재생 효과
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    if (isPlaying && histories.length > 0) {
+      intervalId = setInterval(() => {
+        setCurrentHistoryIndex(prev => {
+          const nextIndex = prev + 1;
+          if (nextIndex >= histories.length) {
+            setIsPlaying(false);
+            return prev;
+          }
+          setPositions(histories[nextIndex].positions);
+          setFrameStyles(histories[nextIndex].frameStyles || {});
+          return nextIndex;
+        });
+      }, 2000); // 2초마다 다음 히스토리로 전환 (애니메이션 시간 고려)
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isPlaying, histories]);
+
+  const handleFrameStyleChange = (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => {
+    setFrameStyles(prev => ({
+      ...prev,
+      [id]: style
+    }));
+  };
+
+  const handleSave = () => {
+    const newHistory: HistoryData = {
+      timestamp: Date.now(),
+      positions: positions,
+      frameStyles: frameStyles,
+      images: images  // 현재 이미지 배열 추가
+    };
+
+    const updatedHistories = [...histories, newHistory];
+    setHistories(updatedHistories);
+    localStorage.setItem('moodboardHistories', JSON.stringify(updatedHistories));
+    setCurrentHistoryIndex(updatedHistories.length - 1);
+    setIsEditing(false);
+  };
+
+  const handleHistoryClick = (index: number) => {
+    if (currentHistoryIndex === index) return;
+    setCurrentHistoryIndex(index);
+    setPositions(histories[index].positions);
+    setFrameStyles(histories[index].frameStyles || {});
+  };
+
+  const handlePlayHistory = () => {
+    if (histories.length > 0) {
+      setCurrentHistoryIndex(0);
+      setPositions(histories[0].positions);
+      setFrameStyles(histories[0].frameStyles || {});
+      setIsPlaying(true);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (!isEditing) return;
+    
+    const { active, delta } = event;
+    setPositions(prev => {
+      const oldPosition = prev[active.id] || { x: 0, y: 0 };
+      return {
+        ...prev,
+        [active.id]: {
+          x: oldPosition.x + delta.x,
+          y: oldPosition.y + delta.y,
+        },
+      };
+    });
+  };
+
+  const handleImageChange = (id: string, newSrc: string, newAlt: string) => {
+    // 이미지 배열 업데이트
+    const updatedImages = images.map(img => 
+      img.id === id ? { ...img, src: newSrc, alt: newAlt } : img
+    );
+    
+    // 이미지 상태 업데이트
+    setImages(updatedImages);
+    
+    // 새로운 히스토리 생성 및 저장
+    const newHistory: HistoryData = {
+      timestamp: Date.now(),
+      positions: positions,
+      frameStyles: frameStyles,
+      images: updatedImages
+    };
+
+    const updatedHistories = [...histories, newHistory];
+    setHistories(updatedHistories);
+    localStorage.setItem('moodboardHistories', JSON.stringify(updatedHistories));
+    setCurrentHistoryIndex(updatedHistories.length - 1);
+  };
 
   return (
     <main className="min-h-screen p-4 relative">
@@ -801,6 +1019,9 @@ export default function MyProfilePage() {
                   position={positions[image.id]}
                   isEditing={isEditing}
                   positions={positions}
+                  frameStyle={frameStyles[image.id] || 'healing'}
+                  onFrameStyleChange={handleFrameStyleChange}
+                  onImageChange={handleImageChange}
                 />
               ))}
             </DndContext>
@@ -809,8 +1030,20 @@ export default function MyProfilePage() {
           {/* 히스토리 슬라이더 */}
           {histories.length > 0 && !isEditing && (
             <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 w-[800px] bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">무드보드 히스토리</h3>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex flex-col">
+                  <h3 className="text-lg font-semibold">무드보드 히스토리</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {currentHistoryIndex === 0 ? "처음 히스토리" : 
+                     currentHistoryIndex === histories.length - 1 ? "마지막 히스토리" :
+                     new Date(histories[currentHistoryIndex].timestamp).toLocaleString('ko-KR', {
+                       month: 'long',
+                       day: 'numeric',
+                       hour: '2-digit',
+                       minute: '2-digit'
+                     })}
+                  </p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -819,38 +1052,47 @@ export default function MyProfilePage() {
                   className="flex items-center gap-2"
                 >
                   {isPlaying ? (
-                    <>
-                      <span className="animate-pulse">재생중...</span>
-                    </>
+                    <span className="animate-pulse">재생중...</span>
                   ) : (
-                    <>
-                      <span>히스토리 재생</span>
-                    </>
+                    <span>히스토리 재생</span>
                   )}
                 </Button>
               </div>
-              <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                {histories.map((history, index) => (
-                  <button
-                    key={history.timestamp}
-                    onClick={() => handleHistoryClick(index)}
-                    className={`flex-shrink-0 p-3 rounded-lg transition-all ${
-                      currentHistoryIndex === index
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-100 hover:bg-gray-200"
-                    }`}
-                  >
-                    <time className="text-sm font-medium">
-                      {new Date(history.timestamp).toLocaleString('ko-KR', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </time>
-                  </button>
-                ))}
+
+              {/* 타임라인 슬라이더 */}
+              <div className="relative w-full h-2 bg-gray-100 rounded-full">
+                <div 
+                  className="absolute top-1/2 left-0 w-full h-0.5 bg-blue-200 -translate-y-1/2"
+                  style={{
+                    width: `${(currentHistoryIndex / (histories.length - 1)) * 100}%`
+                  }}
+                />
+                <div className="absolute top-0 left-0 w-full flex items-center justify-between px-1">
+                  {histories.map((history, index) => (
+                    <button
+                      key={history.timestamp}
+                      className={`w-4 h-4 rounded-full transition-all -mt-1 relative group ${
+                        currentHistoryIndex === index 
+                          ? 'bg-blue-500 scale-125' 
+                          : index < currentHistoryIndex
+                          ? 'bg-blue-200'
+                          : 'bg-gray-300 hover:bg-gray-400'
+                      }`}
+                      onClick={() => handleHistoryClick(index)}
+                    >
+                      <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 whitespace-nowrap text-xs font-medium bg-gray-800 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        {index === 0 ? "처음 히스토리" : 
+                         index === histories.length - 1 ? "마지막 히스토리" :
+                         new Date(history.timestamp).toLocaleString('ko-KR', {
+                           month: 'long',
+                           day: 'numeric',
+                           hour: '2-digit',
+                           minute: '2-digit'
+                         })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
