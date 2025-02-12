@@ -13,7 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Edit2, Save, CheckCircle2, RefreshCw } from "lucide-react";
+import { Edit2, Save, CheckCircle2, RefreshCw, Search } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -48,12 +48,9 @@ type ImageData = {
   left: string;
   top: string;
   color: string;
-  position?: Position;
   keywords: string[];
-  isPersonImage: boolean;
-  isFrequent: boolean;
-  relatedVideos: VideoData[];
   sizeWeight: number;
+  relatedVideos: VideoData[];
 };
 
 type HistoryData = {
@@ -694,8 +691,6 @@ export default function MyProfilePage() {
       top: "5%",
       color: "yellow",
       keywords: ["따뜻한", "가족", "일상"],
-      isPersonImage: false,
-      isFrequent: false,
       sizeWeight: 0.7,
       relatedVideos: [
         {
@@ -719,8 +714,6 @@ export default function MyProfilePage() {
       top: "0%",
       color: "pink",
       keywords: ["감성", "포토", "힐링"],
-      isPersonImage: false,
-      isFrequent: false,
       sizeWeight: 0.6,
       relatedVideos: [
         {
@@ -744,8 +737,6 @@ export default function MyProfilePage() {
       top: "45%",
       color: "blue",
       keywords: ["여유", "휴식", "밤"],
-      isPersonImage: false,
-      isFrequent: false,
       sizeWeight: 0.6,
       relatedVideos: [
         {
@@ -769,8 +760,6 @@ export default function MyProfilePage() {
       top: "40%",
       color: "green",
       keywords: ["자연", "풍경", "평화"],
-      isPersonImage: false,
-      isFrequent: true,
       sizeWeight: 1.1,
       relatedVideos: [
         {
@@ -794,8 +783,6 @@ export default function MyProfilePage() {
       top: "70%",
       color: "purple",
       keywords: ["아늑함", "집", "편안"],
-      isPersonImage: false,
-      isFrequent: false,
       sizeWeight: 0.6,
       relatedVideos: [
         {
@@ -819,8 +806,6 @@ export default function MyProfilePage() {
       top: "75%",
       color: "red",
       keywords: ["추억", "일상", "기록"],
-      isPersonImage: true,
-      isFrequent: false,
       sizeWeight: 1.1,
       relatedVideos: [
         {
@@ -1025,6 +1010,23 @@ export default function MyProfilePage() {
                 />
               ))}
             </DndContext>
+          </div>
+
+          {/* 플로팅 검색 버튼 */}
+          <div className="fixed top-32 right-8 z-50 group">
+            <button
+              onClick={() => {/* 검색 기능 구현 */}}
+              className="w-16 h-16 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
+              aria-label="검색하기"
+            >
+              <Search className="w-7 h-7" />
+            </button>
+            <div className="absolute right-0 top-full mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <div className="bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg whitespace-nowrap text-sm">
+                나와 비슷한 관심사를 가진 사람의 알고리즘 프로필을 찾아보세요!
+              </div>
+              <div className="absolute -top-1 right-6 w-2 h-2 bg-gray-900 transform rotate-45" />
+            </div>
           </div>
 
           {/* 히스토리 슬라이더 */}
