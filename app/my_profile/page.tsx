@@ -1,5 +1,5 @@
 "use client";
-
+import OpenAI from "openai";
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import {
@@ -105,6 +105,21 @@ function DraggableImage({
     transition: isEditing ? 'none' : 'transform 0.8s ease-in-out'
   };
 
+  const openai = new OpenAI({
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+    dangerouslyAllowBrowser: true
+  });
+
+  const completion = openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    store: true,
+    messages: [
+      {"role": "user", "content": "write a haiku about ai"},
+    ],
+  });
+  
+  completion.then((result) => console.log(result.choices[0].message));
+  
   const getClipPath = () => {
     switch (frameStyle) {
       case 'inspiration':
@@ -453,8 +468,8 @@ function DraggableImage({
                   <Tabs defaultValue="history" className="w-full">
                     <div className="bg-gray-70/70 rounded-lg">
                       <TabsList className="w-full grid grid-cols-2 py-0">
-                        <TabsTrigger value="history" className="text-xl py-1">History contents</TabsTrigger>
-                        <TabsTrigger value="ai" className="text-xl py-1">AI-driven contents</TabsTrigger>
+                        <TabsTrigger value="history" className="text-xl py-1">where this image came from</TabsTrigger>
+                        <TabsTrigger value="ai" className="text-xl py-1">Algorithm Alley</TabsTrigger>
                       </TabsList>
                       <br/> <br/>
                       <TabsContent value="history" className="px-6 pb-6">
