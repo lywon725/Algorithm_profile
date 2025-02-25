@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import OpenAI from 'openai';
 
-// OpenAI 클라이언트 초기화
+// OpenAI 클라이언트 초기화 수정
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true  // 브라우저 환경에서 실행 허용
+  dangerouslyAllowBrowser: true
 });
 
 // Supabase 클라이언트 초기화 부분 수정
@@ -83,6 +83,15 @@ type ClusterImage = {
   };
 };
 
+// keywordFrequency 타입 정의 추가
+type KeywordFrequency = {
+  [key: string]: number;
+};
+
+// 네이버 API 설정
+const NAVER_CLIENT_ID = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
+const NAVER_CLIENT_SECRET = process.env.NEXT_PUBLIC_NAVER_CLIENT_SECRET;
+
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,29 +139,57 @@ export default function Home() {
 
   // YouTube API를 통해 비디오 정보 가져오기
   const fetchVideoInfo = async (videoId: string) => {
-    const YOUTUBE_API_KEY = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
-    
-    if (!YOUTUBE_API_KEY) {
-      console.error('YouTube API 키가 설정되지 않았습니다.');
-      return false;
-    }
-
     try {
-      // 기본 태그로 저장하는 방식으로 변경
-      const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
-      const updatedHistory = [...currentHistory, {
-        videoId,
-        title: `Video ${videoId}`, // 임시 제목
-        channelName: 'Unknown Channel',
-        keywords: [videoId], // videoId를 키워드로 사용
-        timestamp: new Date().toISOString()
-      }];
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+      );
       
-      localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
-      return true;
-    } catch (error) {
-      console.error(`비디오 정보 가져오기 실패 (${videoId}):`, error);
+      if (!response.ok) {
+        throw new Error('YouTube API 요청 실패');
+      }
+
+      const data = await response.json();
+      
+      if (data.items && data.items.length > 0) {
+        const videoInfo = data.items[0].snippet;
+        
+        try {
+          // OpenAI로 키워드 추출 시도
+          const extractedKeywords = await extractVideoKeywords(videoInfo);
+          console.log('AI가 추출한 키워드:', extractedKeywords);
+
+          // 로컬 스토리지에 저장
+          const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+          const updatedHistory = [...currentHistory, {
+            videoId,
+            title: videoInfo.title,
+            tags: videoInfo.tags || [],
+            keywords: extractedKeywords.map(k => k.keyword),
+            timestamp: new Date().toISOString()
+          }];
+          localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
+          setWatchHistory(updatedHistory);
+
+          return true;
+        } catch (error) {
+          console.error('키워드 추출 실패:', error);
+          // 실패 시 기본 태그 저장
+          const watchHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+          watchHistory.push({
+            videoId,
+            title: videoInfo.title,
+            tags: videoInfo.tags || [],
+            keywords: videoInfo.tags ? videoInfo.tags.slice(0, 5) : [],
+            timestamp: new Date().toISOString()
+          });
+          localStorage.setItem('watchHistory', JSON.stringify(watchHistory));
+          return true;
+        }
+      }
       return false;
+    } catch (error) {
+      console.error('비디오 정보 가져오기 실패:', error);
+      throw error;
     }
   };
 
@@ -180,14 +217,14 @@ export default function Home() {
     try {
       // 키워드 출현 빈도 계산
       const keywordFrequency = watchHistory.flatMap(item => item.keywords)
-        .reduce((acc: {[key: string]: number}, keyword: string) => {
+        .reduce((acc: KeywordFrequency, keyword: string) => {
           acc[keyword] = (acc[keyword] || 0) + 1;
           return acc;
         }, {});
 
       // 상위 출현 키워드 추출 (10개)
       const topKeywords = Object.entries(keywordFrequency)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
         .slice(0, 10)
         .map(([keyword, count]) => ({ keyword, count }));
 
@@ -302,7 +339,7 @@ CLUSTER_END`;
 
           // 클러스터에 속한 영상 찾기
           const relatedVideos = watchHistory.filter(item =>
-            item.keywords.some(k => relatedKeywords.includes(k))
+            item.keywords.some((k: string) => relatedKeywords.includes(k))
           );
 
           return {
@@ -329,14 +366,17 @@ CLUSTER_END`;
     }
   };
 
-  // 시청 기록 파싱 함수 수정
+  // HTML 파일 파싱 함수 수정
   const parseWatchHistory = async (file: File) => {
     try {
       const text = await file.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, 'text/html');
       
+      // 시청기록 항목 추출
       const watchItems = Array.from(doc.querySelectorAll('.content-cell'));
+      
+      // 시청기록 데이터 추출
       const watchHistory = watchItems
         .map(item => {
           try {
@@ -345,50 +385,87 @@ CLUSTER_END`;
 
             const title = titleElement.textContent?.split(' 을(를) 시청했습니다.')[0];
             const videoUrl = titleElement.getAttribute('href') || '';
-            const videoId = extractVideoId(videoUrl);
+            const videoId = videoUrl.match(/(?:v=|youtu\.be\/)([^&?]+)/)?.[1];
+
+            const channelElement = item.querySelector('a:nth-child(3)');
+            const channelName = channelElement?.textContent || '';
+
+            const dateText = item.textContent || '';
+            const dateMatch = dateText.match(/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}/);
+            if (!dateMatch) return null;
+
+            const date = new Date(dateMatch[0].replace(/\./g, '-'));
 
             if (!videoId || !title) return null;
 
             return {
               title,
               videoId,
-              url: `https://youtube.com/watch?v=${videoId}`
+              channelName,
+              date,
+              url: `https://youtube.com/watch?v=${videoId}`,
+              keywords: [] as string[]
             };
           } catch (error) {
+            console.error('항목 파싱 실패:', error);
             return null;
           }
         })
-        .filter(Boolean);
+        .filter((item): item is WatchHistoryItem => 
+          item !== null && 
+          Array.isArray(item.keywords)
+        );
 
-      // 최근 10개만 처리하도록 제한
-      const recentHistory = watchHistory.slice(0, 10);
-      
-      // 순차적으로 처리하여 API 부하 감소
-      let successCount = 0;
-      for (const item of recentHistory) {
-        if (item && item.videoId) {
-          try {
-            const success = await fetchVideoInfo(item.videoId);
-            if (success) successCount++;
-            // 각 요청 사이에 지연 추가
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } catch (error) {
-            console.error('처리 실패:', error);
-          }
-        }
+      if (watchHistory.length === 0) {
+        throw new Error('시청기록을 찾을 수 없습니다.');
       }
 
-      alert(`${successCount}개의 시청기록이 처리되었습니다.`);
-      
+      // 최근 순으로 정렬하고 30개만 선택
+      const recentWatchHistory = watchHistory
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 30);
+
+      console.log('파싱된 전체 항목 수:', watchItems.length);
+      console.log('처리할 시청기록 수:', recentWatchHistory.length);
+
+      // 각 비디오 정보 가져오기 (병렬 처리로 최적화)
+      let successCount = 0;
+      const batchSize = 5; // 한 번에 처리할 비디오 수
+
+      for (let i = 0; i < recentWatchHistory.length; i += batchSize) {
+        const batch = recentWatchHistory.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (item) => {
+            try {
+              await fetchVideoInfo(item.videoId);
+              successCount++;
+            } catch (error) {
+              console.error(`비디오 정보 가져오기 실패 (${item.videoId}):`, error);
+            }
+          })
+        );
+        // 배치 처리 후 API 제한 고려한 딜레이
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      alert(`${successCount}개의 시청기록이 성공적으로 처리되었습니다!`);
+
       // 저장된 시청 기록 분석
       const savedHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
-      if (savedHistory.length > 0) {
-        const clusters = await analyzeKeywordsWithOpenAI(savedHistory);
-        localStorage.setItem('watchClusters', JSON.stringify(clusters));
-      }
-    } catch (error) {
-      console.error('시청기록 파싱 실패:', error);
-      setError('시청기록 처리 중 오류가 발생했습니다.');
+      const clusters = await analyzeKeywordsWithOpenAI(savedHistory);
+      localStorage.setItem('watchClusters', JSON.stringify(clusters));
+
+      console.log('분석 완료:', {
+        totalVideos: savedHistory.length,
+        totalClusters: clusters.length,
+        topCategories: clusters.slice(0, 3).map(c => ({
+          category: c.main_keyword,
+          strength: c.strength
+        }))
+      });
+    } catch (err) {
+      console.error('시청기록 파싱 실패:', err);
+      setError(err instanceof Error ? err.message : '시청기록 파일 처리 중 오류가 발생했습니다.');
     }
   };
 
@@ -691,38 +768,53 @@ CLUSTER_END`;
 
   // 이미지 검색 함수 수정
   const searchClusterImage = async (cluster: any): Promise<ClusterImage | null> => {
-    const UNSPLASH_KEY = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY;
-    
-    if (!UNSPLASH_KEY) {
-      console.error('Unsplash API 키가 없습니다');
-      return null;
-    }
-
     try {
-      const query = encodeURIComponent(cluster.main_keyword);
-      const url = `https://api.unsplash.com/search/photos?query=${query}&per_page=1`;
+      const searchQuery = cluster.main_keyword.includes('인물')
+        ? `${cluster.main_keyword} 인물사진`
+        : `${cluster.main_keyword} ${cluster.category}`;
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Client-ID ${UNSPLASH_KEY}`
+      console.log('이미지 검색 시작:', searchQuery);
+
+      const response = await fetch(
+        `/api/search-image?query=${encodeURIComponent(searchQuery)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
         }
-      });
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
 
       const data = await response.json();
-      
-      if (data.results && data.results[0]) {
-        return {
-          url: data.results[0].urls.regular,
+      console.log('검색 결과:', data);
+
+      if (data.items?.[0]) {
+        const image = {
+          url: data.items[0].link,
           credit: {
-            name: data.results[0].user.name,
-            link: data.results[0].user.links.html
+            name: 'Naver',
+            link: data.items[0].link
           }
         };
+
+        // 로컬 스토리지에 이미지 저장
+        const savedImages = JSON.parse(localStorage.getItem('clusterImages') || '{}');
+        savedImages[cluster.main_keyword] = image;
+        localStorage.setItem('clusterImages', JSON.stringify(savedImages));
+
+        return image;
       }
+
+      return null;
     } catch (error) {
-      console.error('이미지 검색 오류:', error);
+      console.error('이미지 검색 실패:', error);
+      return null;
     }
-    return null;
   };
 
   // 랜덤 색상 생성 함수 추가
@@ -757,6 +849,24 @@ CLUSTER_END`;
       fetchClusterImages();
     }
   }, [clusters]);
+
+  // 컴포넌트 초기화 시 저장된 이미지 로드
+  useEffect(() => {
+    const loadSavedImages = () => {
+      const savedImages = JSON.parse(localStorage.getItem('clusterImages') || '{}');
+      const newClusterImages = { ...clusterImages };
+      
+      clusters.forEach((cluster, index) => {
+        if (savedImages[cluster.main_keyword]) {
+          newClusterImages[index] = savedImages[cluster.main_keyword];
+        }
+      });
+      
+      setClusterImages(newClusterImages);
+    };
+
+    loadSavedImages();
+  }, [clusters]); // clusters가 변경될 때마다 실행
 
   return (
     <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -942,28 +1052,60 @@ CLUSTER_END`;
 
                       {expandedClusters.has(index) && (
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                          {/* 이미지 검색 버튼과 키워드 표시 */}
+                          <div className="mb-4 p-4 bg-white rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-semibold text-gray-700">대표 이미지 검색</h5>
+                              <Button
+                                onClick={async () => {
+                                  try {
+                                    console.log('이미지 검색 시작:', cluster.main_keyword);
+                                    
+                                    const image = await searchClusterImage(cluster);
+                                    console.log('검색된 이미지:', image);
+
+                                    if (image) {
+                                      console.log('이미지 상태 업데이트:', index);
+                                      setClusterImages(prev => {
+                                        const newImages = { ...prev };
+                                        newImages[index] = image;
+                                        console.log('새 이미지 상태:', newImages);
+                                        return newImages;
+                                      });
+                                    }
+                                  } catch (error) {
+                                    console.error('이미지 검색/업데이트 실패:', error);
+                                  }
+                                }}
+                                variant="outline"
+                                className="hover:bg-blue-50"
+                              >
+                                이미지 검색하기
+                              </Button>
+                            </div>
+                            {clusterImages[index] && (
+                              <div className="mt-2 text-sm text-gray-500">
+                                검색 키워드: {cluster.main_keyword}
+                              </div>
+                            )}
+                          </div>
+
                           {/* 클러스터 대표 이미지 */}
                           {clusterImages[index] && (
-                            <div className="relative w-full h-48 mb-4 rounded-lg overflow-hidden group">
+                            <div className="relative w-full h-48 mb-4 rounded-lg overflow-hidden">
                               <img
                                 src={clusterImages[index]?.url}
                                 alt={cluster.main_keyword}
                                 className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  console.error('이미지 로드 실패:', e);
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = '/placeholder-image.jpg';
+                                }}
                               />
-                              {clusterImages[index]?.credit && (
-                                <div className="absolute bottom-0 right-0 p-2 text-xs text-white bg-black bg-opacity-50 rounded-tl-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                  Photo by{' '}
-                                  <a
-                                    href={clusterImages[index]?.credit.link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="underline"
-                                  >
-                                    {clusterImages[index]?.credit.name}
-                                  </a>
-                                  {' '}on Unsplash
-                                </div>
-                              )}
+                              <div className="absolute bottom-0 right-0 p-2 text-xs text-white bg-black bg-opacity-50">
+                                출처: Naver
+                              </div>
                             </div>
                           )}
 
@@ -1111,47 +1253,43 @@ const VideoCard = ({ video }: { video: any }) => (
   </div>
 );
 
-// 추천 영상 컴포넌트 수정
+// 추천 영상 컴포넌트 단순화
 const RecommendedVideos = ({ cluster }: { cluster: any }) => {
   const [videos, setVideos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchVideos = async () => {
-      const YOUTUBE_KEY = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
-      
-      if (!YOUTUBE_KEY) {
-        console.error('YouTube API 키가 없습니다');
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        const query = encodeURIComponent(cluster.main_keyword);
-        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&maxResults=4&regionCode=KR&key=${YOUTUBE_KEY}`;
+        // 주요 키워드와 분위기 키워드 조합
+        const searchQuery = `${cluster.main_keyword} ${cluster.mood_keyword.split(',')[0]}`;
+        
+        const response = await fetch(
+          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&type=video&maxResults=4&regionCode=KR&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+        );
 
-        const response = await fetch(url);
         const data = await response.json();
-
+        
         if (data.items) {
           const videoList = data.items.map((item: any) => ({
             title: item.snippet.title,
             channelName: item.snippet.channelTitle,
             videoId: item.id.videoId,
             url: `https://youtube.com/watch?v=${item.id.videoId}`,
-            thumbnailUrl: item.snippet.thumbnails.medium.url
+            thumbnailUrl: item.snippet.thumbnails.medium.url,
+            keywords: [cluster.main_keyword]
           }));
           setVideos(videoList);
         }
       } catch (error) {
-        console.error('영상 검색 오류:', error);
+        setVideos([]);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchVideos();
-  }, [cluster.main_keyword]);
+  }, [cluster.main_keyword, cluster.mood_keyword]);
 
   if (isLoading) {
     return (
