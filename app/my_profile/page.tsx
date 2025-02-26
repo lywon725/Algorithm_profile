@@ -27,6 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useRouter } from 'next/navigation';
 
 // OpenAI 클라이언트 초기화
 const openai = new OpenAI({
@@ -912,6 +913,7 @@ export default function MyProfilePage() {
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const [selectedImages, setSelectedImages] = useState<ImageData[]>([]);
   const [isSearchMode, setIsSearchMode] = useState(false);
+  const router = useRouter();
 
   // 데이터 마이그레이션을 위한 useEffect 추가
   useEffect(() => {
@@ -1217,6 +1219,17 @@ ${clusters.map((cluster: any, index: number) => `
     }
   };
 
+  // 검색 버튼 클릭 핸들러
+  const handleSearch = () => {
+    if (selectedImages.length === 0) return;
+    
+    // 선택된 키워드들을 쿼리 파라미터로 변환
+    const keywords = selectedImages.map(img => img.main_keyword).join(',');
+    
+    // search 페이지로 이동
+    router.push(`/search?keywords=${encodeURIComponent(keywords)}`);
+  };
+
   return (
     <main className="min-h-screen p-4 relative">
       {/* 검색 모드일 때 배경 그라데이션 추가 */}
@@ -1229,15 +1242,18 @@ ${clusters.map((cluster: any, index: number) => `
         </div>
       )}
       
-      {/* 선택된 이미지의 main_keyword 표시 (중앙) */}
+      {/* 선택된 이미지의 main_keyword 표시 (중앙) - 짧은 애니메이션 후 사라짐 */}
       {selectedImage && isSearchMode && (
-        <div className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none">
+        <div 
+          className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none animate-fadeOutWithDelay"
+          style={{animationDelay: '1.5s'}} // 1.5초 동안 표시된 후 사라짐
+        >
           <div className="relative">
-            <h1 className="text-[150px] font-bold text-white opacity-10">
+            <h1 className="text-[150px] font-bold text-white opacity-10 animate-scaleUp">
               {selectedImage.main_keyword.toUpperCase()}
             </h1>
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-white/10 backdrop-blur-md px-8 py-4 rounded-full">
+              <div className="bg-white/10 backdrop-blur-md px-8 py-4 rounded-full animate-pulseOnce">
                 <span className="text-4xl font-bold text-white">
                   {selectedImage.main_keyword}
                 </span>
@@ -1286,7 +1302,7 @@ ${clusters.map((cluster: any, index: number) => `
               style={{transitionDelay: selectedImages.length > 0 ? '0.3s' : '0s'}}
             >
               <button
-                onClick={() => alert('검색 기능이 구현될 예정입니다.')}
+                onClick={handleSearch}
                 className="bg-white text-emerald-900 font-bold py-5 px-16 rounded-full border-2 border-white/70 transition-all duration-300 hover:scale-105 shadow-xl text-3xl hover:bg-emerald-50"
               >
                 Search
