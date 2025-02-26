@@ -83,6 +83,8 @@ type DraggableImageProps = {
   onFrameStyleChange: (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => void;
   onImageChange: (id: string, newSrc: string, newKeyword: string) => void;
   onImageSelect: (image: ImageData) => void;
+  isSelected: boolean;
+  isSearchMode: boolean;
 };
 
 function DraggableImage({ 
@@ -94,6 +96,8 @@ function DraggableImage({
   onFrameStyleChange,
   onImageChange,
   onImageSelect,
+  isSelected,
+  isSearchMode,
 }: DraggableImageProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: image.id,
@@ -109,7 +113,7 @@ function DraggableImage({
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(${image.rotate}deg)`,
-    transition: isEditing ? 'none' : 'transform 0.8s ease-in-out'
+    transition: isEditing ? 'none' : 'transform 0.1s ease-in-out'
   } : {
     transform: `translate3d(${position?.x || 0}px, ${position?.y || 0}px, 0) rotate(${image.rotate}deg)`,
     transition: isEditing ? 'none' : 'transform 0.8s ease-in-out'
@@ -405,8 +409,11 @@ function DraggableImage({
               `translate3d(${positions[image.id]?.x || 0}px, ${positions[image.id]?.y || 0}px, 0) rotate(${image.rotate}deg)`,
             transition: isEditing ? 'none' : 'transform 0.8s ease-in-out',
             touchAction: 'none',
+            zIndex: isSelected ? 30 : 10,
           }}
-          className={isEditing ? "cursor-move" : "cursor-pointer"}
+          className={`${isEditing ? "cursor-move" : "cursor-pointer"} ${
+            isSelected ? "ring-4 ring-blue-500 ring-opacity-70 shadow-xl scale-105" : ""
+          }`}
         >
           {isEditing && (
             <div className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group">
@@ -459,37 +466,73 @@ function DraggableImage({
             </div>
           )}
           {!isEditing && (
-            <SheetTrigger asChild>
-              <div 
-                className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group"
-                onClick={handleImageClick}
-              >
-                <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
-                  <div
-                    style={{
-                      clipPath: getClipPath(),
-                    }}
-                    className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
-                  >
-                    <img
-                      src={image.src}
-                      alt={image.main_keyword}
-                      className="w-full h-full object-cover shadow-lg"
-                      onError={(e) => {
-                        console.error('이미지 로드 실패:', e);
-                        // 이미지 로드 실패 시 대체 이미지 표시
-                        (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+            <>
+              {isSearchMode ? (
+                // 검색 모드일 때는 모달 없이 이미지만 표시
+                <div 
+                  className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group"
+                  onClick={handleImageClick}
+                >
+                  <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
+                    <div
+                      style={{
+                        clipPath: getClipPath(),
                       }}
-                    />
-                  </div>
-                  <div className="absolute top-0 left-0 w-full p-2 bg-gradient-to-b from-black/70 to-transparent">
-                    <span className="text-white font-bold text-lg drop-shadow-md">
-                      {image.main_keyword}
-                    </span>
+                      className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
+                    >
+                      <img
+                        src={image.src}
+                        alt={image.main_keyword}
+                        className="w-full h-full object-cover shadow-lg"
+                        onError={(e) => {
+                          console.error('이미지 로드 실패:', e);
+                          // 이미지 로드 실패 시 대체 이미지 표시
+                          (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+                        }}
+                      />
+                    </div>
+                    <div className="absolute top-0 left-0 w-full p-2 bg-gradient-to-b from-black/70 to-transparent">
+                      <span className="text-white font-bold text-lg drop-shadow-md">
+                        {image.main_keyword}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </SheetTrigger>
+              ) : (
+                // 일반 모드일 때는 모달 표시
+                <SheetTrigger asChild>
+                  <div 
+                    className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group"
+                    onClick={handleImageClick}
+                  >
+                    <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
+                      <div
+                        style={{
+                          clipPath: getClipPath(),
+                        }}
+                        className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
+                      >
+                        <img
+                          src={image.src}
+                          alt={image.main_keyword}
+                          className="w-full h-full object-cover shadow-lg"
+                          onError={(e) => {
+                            console.error('이미지 로드 실패:', e);
+                            // 이미지 로드 실패 시 대체 이미지 표시
+                            (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+                          }}
+                        />
+                      </div>
+                      <div className="absolute top-0 left-0 w-full p-2 bg-gradient-to-b from-black/70 to-transparent">
+                        <span className="text-white font-bold text-lg drop-shadow-md">
+                          {image.main_keyword}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </SheetTrigger>
+              )}
+            </>
           )}
           {isEditing && (
             <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-white rounded-full shadow-lg px-3 py-1 z-40">
@@ -867,6 +910,7 @@ export default function MyProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
+  const [selectedImages, setSelectedImages] = useState<ImageData[]>([]);
   const [isSearchMode, setIsSearchMode] = useState(false);
 
   // 데이터 마이그레이션을 위한 useEffect 추가
@@ -1150,26 +1194,119 @@ ${clusters.map((cluster: any, index: number) => `
   // 이미지 선택 핸들러
   const handleImageSelect = (image: ImageData) => {
     setSelectedImage(image);
+    
+    // 이미 선택된 이미지인지 확인
+    const isAlreadySelected = selectedImages.some(img => img.id === image.id);
+    
+    if (isAlreadySelected) {
+      // 이미 선택된 이미지라면 선택 해제
+      setSelectedImages(prev => prev.filter(img => img.id !== image.id));
+    } else {
+      // 새로 선택된 이미지라면 배열에 추가
+      setSelectedImages(prev => [...prev, image]);
+    }
   };
 
   // 검색 모드 토글 함수
   const toggleSearchMode = () => {
     setIsSearchMode(!isSearchMode);
+    if (isSearchMode) {
+      // 검색 모드 종료 시 선택된 이미지들 초기화
+      setSelectedImages([]);
+      setSelectedImage(null);
+    }
   };
 
   return (
     <main className="min-h-screen p-4 relative">
+      {/* 검색 모드일 때 배경 그라데이션 추가 */}
+      {isSearchMode && (
+        <div className="fixed inset-0 z-10 bg-gradient-to-br from-emerald-900 via-black-900 to-white-800 animate-gradient-x">
+          {/* 배경 패턴 효과 */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute inset-0 bg-[url('/images/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"></div>
+          </div>
+        </div>
+      )}
+      
+      {/* 선택된 이미지의 main_keyword 표시 (중앙) */}
+      {selectedImage && isSearchMode && (
+        <div className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none">
+          <div className="relative">
+            <h1 className="text-[150px] font-bold text-white opacity-10">
+              {selectedImage.main_keyword.toUpperCase()}
+            </h1>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-white/10 backdrop-blur-md px-8 py-4 rounded-full">
+                <span className="text-4xl font-bold text-white">
+                  {selectedImage.main_keyword}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 검색 모드일 때 표시되는 제목 */}
+      {isSearchMode && (
+        <div className="absolute top-28 left-0 right-0 text-center z-40">
+          <h1 className="text-4xl font-bold text-white drop-shadow-lg">
+            Explore someone's interest based on your interest
+          </h1>
+          <p className="mt-4 text-white/80 text-lg max-w-2xl mx-auto">
+            Discover profiles that match your unique algorithm preferences
+          </p>
+          
+          {/* 선택된 이미지들의 키워드 컨테이너 - 항상 존재하지만 내용물이 변함 */}
+          <div className="mt-16 flex flex-col items-center gap-6 min-h-[200px] transition-all duration-500">
+            {/* 키워드 태그 - 선택된 이미지가 있을 때만 표시 */}
+            <div 
+              className={`flex flex-wrap gap-4 justify-center max-w-4xl mx-auto transition-all duration-500 ${
+                selectedImages.length > 0 ? 'opacity-100 transform translate-y-0' : 'opacity-0 transform -translate-y-10'
+              }`}
+            >
+              {selectedImages.map((img) => (
+                <div 
+                  key={img.id} 
+                  className="bg-white/20 backdrop-blur-md px-6 py-3 rounded-full border border-white/30 animate-fadeIn"
+                  style={{animationDelay: `${selectedImages.indexOf(img) * 0.1}s`}}
+                >
+                  <span className="text-3xl font-bold text-white drop-shadow-md">
+                    #{img.main_keyword}
+                  </span>
+                </div>
+              ))}
+            </div>
+            
+            {/* 검색 버튼 - 선택된 이미지가 있을 때만 표시 */}
+            <div 
+              className={`transition-all duration-700 ease-in-out ${
+                selectedImages.length > 0 ? 'opacity-100 transform translate-y-0' : 'opacity-0 transform translate-y-10'
+              }`}
+              style={{transitionDelay: selectedImages.length > 0 ? '0.3s' : '0s'}}
+            >
+              <button
+                onClick={() => alert('검색 기능이 구현될 예정입니다.')}
+                className="bg-white text-emerald-900 font-bold py-5 px-16 rounded-full border-2 border-white/70 transition-all duration-300 hover:scale-105 shadow-xl text-3xl hover:bg-emerald-50"
+              >
+                Search
+              </button>
+            </div>
+            
+            {/* 선택된 이미지가 없을 때 안내 메시지 */}
+            <div 
+              className={`text-white text-xl transition-all duration-500 ${
+                selectedImages.length === 0 ? 'opacity-100' : 'opacity-0 absolute -z-10'
+              }`}
+            >
+              이미지를 선택하여 관심사를 추가해보세요
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="relative z-20 w-full">
         <div className="max-w-[1200px] mx-auto">
-          {/* 검색 모드일 때 표시되는 제목 */}
-          {isSearchMode && (
-            <div className="absolute top-8 left-0 right-0 text-center z-40">
-              <h1 className="text-4xl font-bold text-blue-600">
-                Explore someone's interest based on your interest
-              </h1>
-            </div>
-          )}
-          
           {/* 기존 제목과 설명 (검색 모드가 아닐 때만 표시) */}
           {!isSearchMode && (
             <div className="absolute z-30 pl-8 max-w-[600px] space-y-6">
@@ -1232,12 +1369,14 @@ ${clusters.map((cluster: any, index: number) => `
                   key={image.id}
                   image={image}
                   position={positions[image.id]}
-                  isEditing={isEditing && !isSearchMode} // 검색 모드일 때는 편집 비활성화
+                  isEditing={isEditing && !isSearchMode}
                   positions={positions}
                   frameStyle={frameStyles[image.id] || 'healing'}
                   onFrameStyleChange={handleFrameStyleChange}
                   onImageChange={handleImageChange}
                   onImageSelect={handleImageSelect}
+                  isSelected={selectedImages.some(img => img.id === image.id)}
+                  isSearchMode={isSearchMode}
                 />
               ))}
             </DndContext>
