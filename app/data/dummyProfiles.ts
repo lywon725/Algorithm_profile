@@ -196,7 +196,7 @@ export const dummyProfiles: ProfileData[] = [
        
         rotate: 0,
         keywords: ["산", "풍경", "자연", "하이킹", "모험"],
-        sizeWeight: 1.2,
+        sizeWeight: 0.2,
         
         relatedVideos: [
           { title: "아름다운 산 풍경 4K", embedId: "3pysVpnS7HY" },
@@ -224,7 +224,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "45%",
         top: "15%",
         keywords: ["바다", "해변", "파도", "휴양", "여름"],
-        sizeWeight: 1.1,
+        sizeWeight: 0.2,
         relatedVideos: [
           { title: "해변에서의 일출", embedId: "KkKZeZw3EXk" },
           { title: "파도 소리 ASMR", embedId: "V-_O7nl0Ii0" }
@@ -247,7 +247,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "20%",
         top: "45%",
         keywords: ["숲", "나무", "녹색", "평화", "산책"],
-        sizeWeight: 1.0,
+        sizeWeight: 0.6,
         relatedVideos: [
           { title: "숲속 산책로", embedId: "dJZJxX5G0YU" },
           { title: "숲속의 새소리", embedId: "rYoZgpAEkFs" }
@@ -270,7 +270,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "55%",
         top: "50%",
         keywords: ["가을", "단풍", "낙엽", "계절", "공원"],
-        sizeWeight: 1.05,
+        sizeWeight: 0.2,
         relatedVideos: [
           { title: "가을 풍경 모음", embedId: "PLOPygVcaVE" },
           { title: "단풍길 드라이브", embedId: "2ZIpFytCSVc" }
@@ -300,7 +300,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "10%",
         top: "15%",
         keywords: ["도시", "야경", "빌딩", "현대적", "도시생활"],
-        sizeWeight: 1.2,
+        sizeWeight: 0.6,
         relatedVideos: [
           { title: "서울의 아름다운 야경", embedId: "7OuOXJ3c9jk" },
           { title: "세계의 멋진 도시들", embedId: "8XK9QvRgx8w" }
@@ -422,7 +422,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "45%",
         top: "25%",
         keywords: ["샐러드", "건강", "채소", "비건", "컬러풀"],
-        sizeWeight: 1.1,
+        sizeWeight: 0.5,
         relatedVideos: [
           { title: "영양만점 샐러드 레시피", embedId: "gJZGLZxVeJw" },
           { title: "홈메이드 드레싱 만들기", embedId: "bH7zPvTP5Jc" }
@@ -452,7 +452,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "20%",
         top: "15%",
         keywords: ["미술", "갤러리", "전시", "현대미술", "추상"],
-        sizeWeight: 1.3,
+        sizeWeight: 0.3,
         relatedVideos: [
           { title: "현대 미술의 이해", embedId: "ZwXzL6h6rS0" },
           { title: "유명 작가들의 작품 해설", embedId: "dK9QLhAEJvM" }
@@ -475,7 +475,7 @@ export const dummyProfiles: ProfileData[] = [
         left: "55%",
         top: "35%",
         keywords: ["디자인", "건축", "미니멀", "모던", "구조"],
-        sizeWeight: 1.2,
+        sizeWeight: 0.8,
         relatedVideos: [
           { title: "현대 건축의 트렌드", embedId: "kH2vB1TkB9U" },
           { title: "미니멀리즘 디자인의 특징", embedId: "9XzqTzxQzpE" }

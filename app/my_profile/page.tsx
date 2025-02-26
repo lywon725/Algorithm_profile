@@ -63,12 +63,13 @@ type ImageData = {
   mood_keyword: string;
   sub_keyword: string;
   description: string;
+  desired_self: boolean;
 };
 
 type HistoryData = {
   timestamp: number;
   positions: Record<string, Position>;
-  frameStyles: Record<string, 'healing' | 'inspiration' | 'people' | 'interest'>;
+  frameStyles: Record<string, 'healing' | 'inspiration' | 'people' | 'interest' | 'star'>;
   images: ImageData[];
 };
 
@@ -85,8 +86,8 @@ type DraggableImageProps = {
   position?: Position;
   isEditing: boolean;
   positions: Record<string, Position>;
-  frameStyle: 'healing' | 'inspiration' | 'people' | 'interest';
-  onFrameStyleChange: (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => void;
+  frameStyle: 'healing' | 'inspiration' | 'people' | 'interest' | 'star';
+  onFrameStyleChange: (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest' | 'star') => void;
   onImageChange: (id: string, newSrc: string, newKeyword: string) => void;
   onImageSelect: (image: ImageData) => void;
   isSelected: boolean;
@@ -144,6 +145,9 @@ function DraggableImage({
   }, []);
 
   const getClipPath = () => {
+    if (image.desired_self) {
+      return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+    }
     switch (frameStyle) {
       case 'inspiration':
         return 'polygon(50% 0%, 100% 100%, 0% 100%)';
@@ -155,6 +159,9 @@ function DraggableImage({
   };
 
   const getFrameStyle = () => {
+    if (image.desired_self) {
+      return ''; // star 모양을 위해 빈 문자열 반환
+    }
     switch (frameStyle) {
       case 'healing':
         return 'rounded-lg';
@@ -266,7 +273,7 @@ function DraggableImage({
   };
 
   const handleFrameStyleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onFrameStyleChange(image.id, e.target.value as 'healing' | 'inspiration' | 'people' | 'interest');
+    onFrameStyleChange(image.id, e.target.value as 'healing' | 'inspiration' | 'people' | 'interest' | 'star');
   };
 
   // Unsplash 이미지 검색 함수
@@ -560,6 +567,7 @@ function DraggableImage({
                 <option value="inspiration">🔺 영감을 주는 영상</option>
                 <option value="people">⚪️ 내가 좋아하는 사람</option>
                 <option value="interest">🔶 나만의 관심사</option>
+                <option value="star">⭐️ 나만의 이미지</option>
               </select>
             </div>
           )}
@@ -856,7 +864,7 @@ declare global {
 
 export default function MyProfilePage() {
   const [positions, setPositions] = useState<Record<string, Position>>({});
-  const [frameStyles, setFrameStyles] = useState<Record<string, 'healing' | 'inspiration' | 'people' | 'interest'>>({});
+  const [frameStyles, setFrameStyles] = useState<Record<string, 'healing' | 'inspiration' | 'people' | 'interest' | 'star'>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [histories, setHistories] = useState<HistoryData[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
@@ -964,6 +972,8 @@ export default function MyProfilePage() {
         setFrameStyles(latestHistory.frameStyles || {});
         if (latestHistory.images && latestHistory.images.length > 0) {
           setImages(latestHistory.images);
+          // 최신 히스토리의 모든 이미지 ID를 visibleImageIds에 추가
+          setVisibleImageIds(new Set(latestHistory.images.map(img => img.id)));
         }
       }
       // 마이그레이션된 데이터 저장
@@ -979,6 +989,8 @@ export default function MyProfilePage() {
       setHistories([initialHistory]);
       localStorage.setItem('moodboardHistories', JSON.stringify([initialHistory]));
       setCurrentHistoryIndex(0);
+      // 초기 히스토리의 모든 이미지 ID를 visibleImageIds에 추가
+      setVisibleImageIds(new Set(images.map(img => img.id)));
     }
   }, []);
 
@@ -1038,7 +1050,7 @@ export default function MyProfilePage() {
     }
   };
 
-  const handleFrameStyleChange = (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => {
+  const handleFrameStyleChange = (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest' | 'star') => {
     setFrameStyles(prev => ({
       ...prev,
       [id]: style
@@ -1370,7 +1382,7 @@ ${clusters.map((cluster: any, index: number) => `
                     position={positions[image.id]}
                     isEditing={isEditing && !isSearchMode}
                     positions={positions}
-                    frameStyle={frameStyles[image.id] || 'healing'}
+                    frameStyle={image.desired_self ? 'star' : (frameStyles[image.id] || 'healing')}
                     onFrameStyleChange={handleFrameStyleChange}
                     onImageChange={handleImageChange}
                     onImageSelect={handleImageSelect}

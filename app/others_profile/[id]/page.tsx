@@ -221,7 +221,7 @@ export default function OthersProfilePage() {
                   </span>
                 </div>
                 
-                {/* 이미지 가져오기 버튼 추가 
+                {/* 이미지 가져오기 버튼 추가 */}
                 <Button
                   className="w-full mt-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:opacity-90 text-white font-semibold py-3 rounded-lg shadow-lg transition-all duration-300 hover:scale-[1.02]"
                   onClick={() => {
@@ -254,12 +254,17 @@ export default function OthersProfilePage() {
                         left: "30%",
                         top: "30%",
                         rotate: 0,
+                        sizeWeight: 0.3,
+                        desired_self: true
                       };
                       
                       const newHistory = {
                         timestamp: Date.now(),
                         positions: latestHistory.positions || {},
-                        frameStyles: latestHistory.frameStyles || {},
+                        frameStyles: {
+                          ...(latestHistory.frameStyles || {}),
+                          [newId]: 'star'  // 새 이미지의 프레임 스타일을 star로 설정
+                        },
                         images: [...(latestHistory.images || []), newImage]
                       };
                       
@@ -290,7 +295,7 @@ export default function OthersProfilePage() {
                     이 이미지 가져오기
                   </div>
                 </Button>
-                */}
+                
               </div>
 
               {/* 정보 섹션 */}
@@ -414,26 +419,36 @@ export default function OthersProfilePage() {
 
 // 프레임 스타일 가져오기
 function getFrameStyle(image: ImageData): string {
-  // 이미지 ID에서 프레임 스타일 추출 (예시 로직)
+  // frameStyle이 'star'인 경우 빈 문자열 반환 (clip-path가 적용되도록)
+  if (image.frameStyle === 'star') {
+    return '';
+  }
+  
+  // 기존 로직 유지
   if (image.id.includes('nature')) {
-    return 'rounded-lg'; // healing
+    return 'rounded-lg';
   } else if (image.id.includes('art')) {
-    return ''; // inspiration (no rounded corners)
+    return '';
   } else if (image.id.includes('food')) {
-    return 'rounded-full'; // people
+    return 'rounded-full';
   } else {
-    return ''; // interest (no rounded corners)
+    return '';
   }
 }
 
 // 클립 패스 가져오기
 function getClipPath(image: ImageData): string {
-  // 이미지 ID에서 클립 패스 추출 (예시 로직)
+  // frameStyle이 'star'인 경우 별 모양 클립패스 반환
+  if (image.frameStyle === 'star') {
+    return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+  }
+  
+  // 기존 로직 유지
   if (image.id.includes('art')) {
-    return 'polygon(50% 0%, 100% 100%, 0% 100%)'; // inspiration
+    return 'polygon(50% 0%, 100% 100%, 0% 100%)';
   } else if (image.id.includes('tech')) {
-    return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'; // interest
+    return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)';
   } else {
-    return ''; // 기본값 (클립 패스 없음)
+    return '';
   }
 } 
