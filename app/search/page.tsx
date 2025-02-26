@@ -111,7 +111,7 @@ export default function SearchPage() {
                 <div 
                   key={profile.id}
                   className="bg-white/10 backdrop-blur-md rounded-xl p-6 hover:bg-white/15 transition-all cursor-pointer"
-                  onClick={() => router.push(`/profile/${profile.id}`)}
+                  onClick={() => router.push(`/others_profile/${profile.id}`)}
                 >
                   <h3 className="text-2xl font-bold text-white mb-3">{profile.nickname}</h3>
                   <p className="text-white/80 text-sm mb-4 line-clamp-2">{profile.description}</p>
