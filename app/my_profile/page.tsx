@@ -28,6 +28,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+// OpenAI 클라이언트 초기화
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true
+});
+
 type Position = {
   x: number;
   y: number;
@@ -41,7 +47,7 @@ type VideoData = {
 type ImageData = {
   id: string;
   src: string;
-  alt: string;
+  main_keyword: string;
   width: number;
   height: number;
   rotate: number;
@@ -75,7 +81,7 @@ type DraggableImageProps = {
   positions: Record<string, Position>;
   frameStyle: 'healing' | 'inspiration' | 'people' | 'interest';
   onFrameStyleChange: (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => void;
-  onImageChange: (id: string, newSrc: string, newAlt: string) => void;
+  onImageChange: (id: string, newSrc: string, newKeyword: string) => void;
 };
 
 function DraggableImage({ 
@@ -104,11 +110,6 @@ function DraggableImage({
     transform: `translate3d(${position?.x || 0}px, ${position?.y || 0}px, 0) rotate(${image.rotate}deg)`,
     transition: isEditing ? 'none' : 'transform 0.8s ease-in-out'
   };
-
-  const openai = new OpenAI({
-    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-    dangerouslyAllowBrowser: true
-  });
 
   const completion = openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -162,30 +163,58 @@ function DraggableImage({
       return Promise.resolve();
     };
 
-    const initializePlayers = async () => {
-      await loadYouTubeAPI();
-      
-      image.relatedVideos.forEach((video) => {
-        const playerElement = document.getElementById(`player-${video.embedId}`);
-        if (playerElement) {
-          new window.YT.Player(playerElement, {
-            videoId: video.embedId,
-            events: {
-              onStateChange: (event: any) => {
-                if (event.data === window.YT.PlayerState.PLAYING) {
-                  setWatchedVideos(prev => 
-                    prev.includes(video.embedId) ? prev : [...prev, video.embedId]
-                  );
+    // 플레이어 초기화
+    const initializePlayers = () => {
+      // 안전하게 처리: relatedVideos가 존재하고 배열인지 확인
+      if (image.relatedVideos && Array.isArray(image.relatedVideos)) {
+        image.relatedVideos.forEach((video) => {
+          if (!video.embedId) return; // embedId가 없으면 건너뛰기
+          
+          try {
+            const player = new window.YT.Player(`player-${video.embedId}`, {
+              events: {
+                onStateChange: (event) => {
+                  // 영상이 끝났을 때 (상태 코드 0)
+                  if (event.data === 0) {
+                    setWatchedVideos(prev => {
+                      if (prev.includes(video.embedId)) return prev;
+                      return [...prev, video.embedId];
+                    });
+                  }
                 }
               }
-            }
-          });
-        }
-      });
+            });
+          } catch (error) {
+            console.error('YouTube 플레이어 초기화 오류:', error);
+          }
+        });
+      }
     };
 
-    initializePlayers();
-  }, [image.relatedVideos]);
+    // API 로드 후 플레이어 초기화
+    loadYouTubeAPI().then(() => {
+      // window.YT가 로드되었는지 확인
+      if (window.YT && window.YT.Player) {
+        initializePlayers();
+      } else {
+        // YT API가 아직 완전히 로드되지 않은 경우 대기
+        const checkYT = setInterval(() => {
+          if (window.YT && window.YT.Player) {
+            clearInterval(checkYT);
+            initializePlayers();
+          }
+        }, 100);
+        
+        // 일정 시간 후 체크 중단 (5초)
+        setTimeout(() => clearInterval(checkYT), 5000);
+      }
+    });
+
+    // 컴포넌트 언마운트 시 정리
+    return () => {
+      // 필요한 정리 작업
+    };
+  }, []); // 의존성 배열 비움 - 컴포넌트 마운트 시 한 번만 실행
 
   const handleVideoClick = (video: VideoData) => {
     // 로컬 스토리지에서 현재 시청 기록 가져오기
@@ -299,10 +328,10 @@ function DraggableImage({
   const handleImageSelect = async (selectedImage: UnsplashImage) => {
     try {
       const newSrc = selectedImage.urls.regular;
-      const newAlt = selectedImage.alt_description || image.alt;
+      const newKeyword = selectedImage.alt_description || image.main_keyword;
       
       // 부모 컴포넌트의 이미지 변경 함수 호출
-      onImageChange(image.id, newSrc, newAlt);
+      onImageChange(image.id, newSrc, newKeyword);
       
       setShowImageModal(false);
     } catch (error) {
@@ -318,8 +347,8 @@ function DraggableImage({
           style={{
             ...style,
             position: 'absolute',
-            width: image.width * image.sizeWeight,
-            height: (image.height + 80) * image.sizeWeight,
+            width: image.width * image.sizeWeight*0.4,
+            height: (image.height + 80) * image.sizeWeight*0.45,
             left: image.left,
             top: image.top,
             transform: transform ? 
@@ -339,11 +368,15 @@ function DraggableImage({
                   }}
                   className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
                 >
-                  <Image
+                  <img
                     src={image.src}
-                    alt={image.alt}
-                    fill
-                    className="object-cover shadow-lg"
+                    alt={image.main_keyword}
+                    className="w-full h-full object-cover shadow-lg"
+                    onError={(e) => {
+                      console.error('이미지 로드 실패:', e);
+                      // 이미지 로드 실패 시 대체 이미지 표시
+                      (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+                    }}
                   />
                 </div>
               </div>
@@ -379,31 +412,28 @@ function DraggableImage({
           {!isEditing && (
             <SheetTrigger asChild>
               <div className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group">
-                <div className={`relative w-full h-[calc(100%-80px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
+                <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
                   <div
                     style={{
                       clipPath: getClipPath(),
                     }}
                     className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
                   >
-                    <Image
+                    <img
                       src={image.src}
-                      alt={image.alt}
-                      fill
-                      className="object-cover shadow-lg"
+                      alt={image.main_keyword}
+                      className="w-full h-full object-cover shadow-lg"
+                      onError={(e) => {
+                        console.error('이미지 로드 실패:', e);
+                        // 이미지 로드 실패 시 대체 이미지 표시
+                        (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+                      }}
                     />
                   </div>
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                    <div className="flex flex-wrap gap-2 justify-center p-4">
-                      {image.keywords.map((keyword, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-block px-2 py-1 text-sm font-medium text-white bg-black/40 backdrop-blur-sm rounded-full"
-                        >
-                          #{keyword}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="absolute top-0 left-0 w-full p-2 bg-gradient-to-b from-black/70 to-transparent">
+                    <span className="text-white font-bold text-lg drop-shadow-md">
+                      {image.main_keyword}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -442,16 +472,15 @@ function DraggableImage({
           <div className="h-full overflow-y-auto px-4">
             <div className="flex flex-col max-w-3xl mx-auto pb-8">
               <div className="relative w-full h-[400px] flex-shrink-0">
-                <Image
+                <img
                   src={image.src}
-                  alt={image.alt}
-                  fill
-                  className="object-cover rounded-lg"
+                  alt={image.main_keyword}
+                  className="w-full h-full object-cover rounded-lg"
                 />
               </div>
               <div className="mt-6 space-y-6">
                 <div className="space-y-4">
-                  <h3 className="text-2xl font-semibold">{image.alt}</h3>
+                  <h3 className="text-2xl font-semibold">{image.main_keyword}</h3>
                   <div className="flex flex-wrap gap-2">
                     {image.keywords.map((keyword, idx) => (
                       <span
@@ -611,11 +640,10 @@ function DraggableImage({
               {/* 기존 이미지 (좌측) - 50% 크기로 조정 */}
               <div className="col-span-6 flex items-center justify-center">
                 <div className="w-[80%] aspect-square relative rounded-lg overflow-hidden border-2 border-blue-500 shadow-lg">
-                  <Image
+                  <img
                     src={image.src}
-                    alt="현재 이미지"
-                    fill
-                    className="object-cover"
+                    alt={image.main_keyword}
+                    className="w-full h-full object-cover"
                   />
                 </div>
               </div>
@@ -646,11 +674,10 @@ function DraggableImage({
                         className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-colors cursor-pointer group shadow-md"
                         onClick={() => handleImageSelect(altImage)}
                       >
-                        <Image
+                        <img
                           src={altImage.urls.regular}
                           alt={altImage.alt_description || '대체 이미지'}
-                          fill
-                          className="object-cover"
+                          className="w-full h-full object-cover"
                         />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <button className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full font-medium hover:bg-white transition-colors">
@@ -697,143 +724,193 @@ export default function MyProfilePage() {
   const [images, setImages] = useState<ImageData[]>([
     {
       id: "1",
-      src: "https://images.unsplash.com/photo-1611516491426-03025e6043c8",
-      alt: "Mood 1",
+      src: "/images/jd.jpg",
+      main_keyword: "지디",
       width: 250,
       height: 250,
       rotate: -6,
       left: "10%",
-      top: "5%",
+      top: "20%",
       color: "yellow",
-      keywords: ["따뜻한", "가족", "일상"],
-      sizeWeight: 0.7,
+      keywords: ["유명인", "인기", "특이한"],
+      sizeWeight: 2,
       relatedVideos: [
         {
-          title: "따뜻한 감성의 일상 브이로그",
-          embedId: "gQHvqQw0GzM"
+          title: "치인다는 지디 실제 말투 #gd #광희 #카톡",
+          embedId: "vKUvZwPk72w"
         },
         {
-          title: "포근한 주말 아침 일상",
-          embedId: "D3ZFtSUDNQM"
+          title: "지디가 직접 말하는 MBTI",
+          embedId: "07QjgJfrSNM"
         }
       ]
     },
     {
       id: "2",
-      src: "https://images.unsplash.com/photo-1609151354448-c4a53450c6e9",
-      alt: "Mood 2",
+      src: "/images/changbin.jpg",
+      main_keyword: "창빈",
       width: 250,
       height: 250,
       rotate: 3,
       left: "50%",
       top: "0%",
       color: "pink",
-      keywords: ["감성", "포토", "힐링"],
-      sizeWeight: 0.6,
+      keywords: ["채령", "다정함", "사랑스러운"],
+      sizeWeight: 5,
       relatedVideos: [
         {
-          title: "감성 사진 촬영 팁",
-          embedId: "BQHgmqZqwYY"
+          title: " 남녀 사이에 친구가 있다고 믿는 아이돌 TOP4",
+          embedId: "vTvUBnBPWhM"
         },
         {
-          title: "힐링되는 감성 영상",
+          title: " 창빈님의 다정함이 너무 오글거렸던 채령",
+          embedId: "eqZA0z_bLHg"
+        },
+        {
+          title: " 창빈X채령 연습생 때 친해진 계기",
+          embedId: "eojlzOjPhiI"
+        },
+        {
+          title: "Stray Kids ITZY Cut Ryujin, Yuna, Yeji, Chaeryeong",
+          embedId: "5DEmWyekHx4"
+        },
+        {
+          title: "전설의 JYP 3대 웃수저 ㅋㅋㅋㅋ",
           embedId: "D4jPZXrOF3Y"
         }
       ]
     },
     {
       id: "3",
-      src: "https://images.unsplash.com/photo-1616046229478-9901c5536a45",
-      alt: "Mood 3",
+      src: "/images/laughing.jpg",
+      main_keyword: "유머",
       width: 280,
       height: 200,
       rotate: -12,
       left: "20%",
       top: "45%",
       color: "blue",
-      keywords: ["여유", "휴식", "밤"],
-      sizeWeight: 0.6,
+      keywords: ["유쾌한", "밝은", "웃김"],
+      sizeWeight: 3,
       relatedVideos: [
         {
-          title: "밤의 여유로운 재즈 카페",
-          embedId: "cJWBJ4uYVHk"
+          title: "보는 사람이 더 민망한 오해원의 애교",
+          embedId: "yBHW52P34to"
         },
         {
-          title: "편안한 밤 분위기 음악",
-          embedId: "DrmcAh2FRHQ"
+          title: "[르세라핌 LE SSERAFIM] 턱이요?",
+          embedId: "r-eA0zHtrHU"
+        },
+        {
+          title: "야노시호가 말하는 일본에서 추성훈 인기정도",
+          embedId: "I_mrEE08Cvo"
         }
       ]
     },
     {
       id: "4",
-      src: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
-      alt: "Mood 4",
+      src: "/images/travel.jpg",
+      main_keyword: "여행",
       width: 320,
       height: 250,
       rotate: 6,
       left: "60%",
       top: "40%",
       color: "green",
-      keywords: ["자연", "풍경", "평화"],
-      sizeWeight: 1.1,
+      keywords: ["세계여행", "도전", "관광객", "탐험하는"],
+      sizeWeight: 3,
       relatedVideos: [
         {
-          title: "평화로운 자연 풍경",
-          embedId: "BHACKCNDMW8"
+          title: "태국 깊은 산 속 어딘가..",
+          embedId: "P9rzOFoVWhM"
         },
         {
-          title: "힐링되는 자연 소리",
-          embedId: "qRXBGIK7Rqk"
-        }
-      ]
-    },
-    {
-      id: "5",
-      src: "https://images.unsplash.com/photo-1615529182904-14819c35db37",
-      alt: "Mood 5",
-      width: 280,
-      height: 320,
-      rotate: -3,
-      left: "5%",
-      top: "70%",
-      color: "purple",
-      keywords: ["아늑함", "집", "편안"],
-      sizeWeight: 0.6,
-      relatedVideos: [
-        {
-          title: "아늑한 집에서의 하루",
-          embedId: "ZVrGw8QnqWY"
+          title: "한국에 다시는 안온다는 관강객 ㄷㄷ",
+          embedId: "5i0n89NMEtY"
         },
         {
-          title: "편안한 홈카페 브이로그",
-          embedId: "X2mnHpqiHGQ"
-        }
-      ]
-    },
-    {
-      id: "6",
-      src: "https://images.unsplash.com/photo-1542596768-5d1d21f1cf98",
-      alt: "Mood 6",
-      width: 250,
-      height: 250,
-      rotate: 12,
-      left: "45%",
-      top: "75%",
-      color: "red",
-      keywords: ["추억", "일상", "기록"],
-      sizeWeight: 1.1,
-      relatedVideos: [
-        {
-          title: "일상의 기록, 폴라로이드",
-          embedId: "hZONJ8XnKHE"
-        },
-        {
-          title: "추억이 담긴 브이로그",
-          embedId: "QpQNemr-m2c"
+          title: "최정상 피겨선수가 얼음판을 맛보는 이유",
+          embedId: "ZV1ZaQkaHcM"
         }
       ]
     }
   ]);
+
+  const [profile, setProfile] = useState({
+    nickname: '',
+    description: ''
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
+
+  // 데이터 마이그레이션을 위한 useEffect 추가
+  useEffect(() => {
+    // 로컬 스토리지에서 기존 데이터 마이그레이션
+    const migrateLocalStorageData = () => {
+      try {
+        // 무드보드 히스토리 마이그레이션
+        const storedHistories = localStorage.getItem('moodboardHistories');
+        if (storedHistories) {
+          const parsedHistories = JSON.parse(storedHistories);
+          
+          // 각 히스토리의 이미지 데이터 마이그레이션
+          const migratedHistories = parsedHistories.map((history: any) => {
+            // 이미지 배열 마이그레이션
+            const migratedImages = history.images?.map((img: any) => {
+              // alt 필드가 있고 main_keyword 필드가 없는 경우에만 마이그레이션
+              if (img.alt && !img.main_keyword) {
+                return {
+                  ...img,
+                  main_keyword: img.alt, // alt 값을 main_keyword로 복사
+                };
+              }
+              return img;
+            });
+            
+            return {
+              ...history,
+              images: migratedImages || history.images,
+            };
+          });
+          
+          // 마이그레이션된 데이터 저장
+          localStorage.setItem('moodboardHistories', JSON.stringify(migratedHistories));
+          console.log('무드보드 히스토리 데이터 마이그레이션 완료');
+        }
+        
+        // 클러스터 이미지 마이그레이션
+        const storedClusterImages = localStorage.getItem('clusterImages');
+        if (storedClusterImages) {
+          const parsedClusterImages = JSON.parse(storedClusterImages);
+          
+          // 각 클러스터 이미지 마이그레이션
+          const migratedClusterImages: Record<string, any> = {};
+          
+          Object.entries(parsedClusterImages).forEach(([key, value]: [string, any]) => {
+            migratedClusterImages[key] = {
+              ...value,
+              main_keyword: key, // 키를 main_keyword로 사용
+            };
+          });
+          
+          // 마이그레이션된 데이터 저장
+          localStorage.setItem('clusterImages', JSON.stringify(migratedClusterImages));
+          console.log('클러스터 이미지 데이터 마이그레이션 완료');
+        }
+        
+        // 마이그레이션 완료 표시
+        localStorage.setItem('dataMigrationCompleted', 'true');
+      } catch (error) {
+        console.error('데이터 마이그레이션 중 오류 발생:', error);
+      }
+    };
+    
+    // 마이그레이션이 이미 완료되었는지 확인
+    const migrationCompleted = localStorage.getItem('dataMigrationCompleted');
+    if (migrationCompleted !== 'true') {
+      migrateLocalStorageData();
+    }
+  }, []);
 
   // 컴포넌트 마운트 시 저장된 히스토리 불러오기 및 최근 위치 설정
   useEffect(() => {
@@ -841,7 +918,7 @@ export default function MyProfilePage() {
     if (savedHistories) {
       const parsedHistories = JSON.parse(savedHistories);
       // 기존 히스토리 데이터 마이그레이션
-      const migratedHistories = parsedHistories.map((history: HistoryData) => ({
+      const migratedHistories = parsedHistories.map((history: any) => ({
         ...history,
         images: history.images || images // 이미지 배열이 없으면 현재 이미지 사용
       }));
@@ -951,10 +1028,10 @@ export default function MyProfilePage() {
     });
   };
 
-  const handleImageChange = (id: string, newSrc: string, newAlt: string) => {
+  const handleImageChange = (id: string, newSrc: string, newKeyword: string) => {
     // 이미지 배열 업데이트
     const updatedImages = images.map(img => 
-      img.id === id ? { ...img, src: newSrc, alt: newAlt } : img
+      img.id === id ? { ...img, src: newSrc, main_keyword: newKeyword } : img
     );
     
     // 이미지 상태 업데이트
@@ -974,6 +1051,76 @@ export default function MyProfilePage() {
     setCurrentHistoryIndex(updatedHistories.length - 1);
   };
 
+  // 프로필 생성 함수를 별도로 분리
+  const generateUserProfile = async () => {
+    try {
+      setIsGeneratingProfile(true);
+      
+      // 로컬 스토리지에서 클러스터 정보 가져오기
+      const clusters = JSON.parse(localStorage.getItem('watchClusters') || '[]');
+      
+      if (clusters.length === 0) {
+        setProfile({
+          nickname: '알고리즘 탐험가',
+          description: '아직 충분한 시청 기록이 없습니다. 더 많은 영상을 시청하고 분석해보세요!'
+        });
+        return;
+      }
+      
+      // 클러스터 정보를 기반으로 프로필 생성
+      const prompt = `
+당신은 사용자의 YouTube 시청 패턴을 분석하여 그들의 성격과 취향을 파악하는 전문가입니다.
+다음은 사용자의 YouTube 시청 기록을 분석한 클러스터 정보입니다:
+
+${clusters.map((cluster: any, index: number) => `
+클러스터 ${index + 1}:
+- 주요 키워드: ${cluster.main_keyword}
+- 카테고리: ${cluster.category || '미분류'}
+- 설명: ${cluster.description || '정보 없음'}
+- 감성 키워드: ${cluster.mood_keyword || '정보 없음'}
+- 관련 키워드: ${cluster.keyword_list || '정보 없음'}
+`).join('\n')}
+
+위 정보를 바탕으로 다음 두 가지를 한국어로 생성해주세요:
+
+1. 사용자의 대표 클러스터를 종합하여 봤을때, 여러가지를 혼합하여 새로운 키워드로 취향과 성격을 반영한 독특하고 창의적인 짧은 명사 별명 (예: "감성적인 여행자", "호기심 많은 지식탐험가" 등)
+2. 중요!!: 별명 생성시 재밌는 동물, 물건, 이름등으로 은유법이나 비유 명사를 무조건 활용해야함 ("예: 현아를 좋아하는 사과, 토끼)
+3. 사용자의 콘텐츠 소비 패턴, 취향, 관심사를 2-3문장으로 짧게 재밌게 흥미롭게 요약한 설명, 사용자를 예측해도 됨
+
+응답 형식:
+별명: [생성된 별명]
+설명: [생성된 설명]
+`;
+
+      const completion = await openai.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "gpt-3.5-turbo",
+        temperature: 0.8,
+      });
+
+      const response = completion.choices[0].message.content || '';
+      
+      // 응답 파싱
+      const nicknameMatch = response.match(/별명: (.*)/);
+      const descriptionMatch = response.match(/설명: (.*)/s);
+      
+      setProfile({
+        nickname: nicknameMatch ? nicknameMatch[1].trim() : '알고리즘 탐험가',
+        description: descriptionMatch 
+          ? descriptionMatch[1].trim() 
+          : '당신만의 독특한 콘텐츠 취향을 가지고 있습니다. 더 많은 영상을 시청하고 분석해보세요!'
+      });
+    } catch (error) {
+      console.error('프로필 생성 오류:', error);
+      setProfile({
+        nickname: '알고리즘 탐험가',
+        description: '프로필 생성 중 오류가 발생했습니다. 나중에 다시 시도해주세요.'
+      });
+    } finally {
+      setIsGeneratingProfile(false);
+    }
+  };
+
   return (
     <main className="min-h-screen p-4 relative">
       <div className="relative z-20 w-full">
@@ -981,14 +1128,13 @@ export default function MyProfilePage() {
           <div className="absolute z-30 pl-8 max-w-[600px] space-y-6">
             <div className="flex items-center justify-between">
               <h1 className="text-5xl font-bold tracking-tight">
-                Yeowon&apos;s Mood board
+                {profile.nickname ? `${profile.nickname}의 무드보드` : 'My 무드보드'}
               </h1>
             </div>
             <p className="text-gray-500 text-lg leading-relaxed mt-4">
-              This girl likes warm contents with family and into photography.
-              I mainly watch calming videos for healing purposes, usually at night before going to sleep.
+              {profile.description || '나만의 알고리즘 프로필을 생성해보세요.'}
             </p>
-            <div>
+            <div className="flex gap-4">
               <Button
                 variant="outline"
                 size="sm"
@@ -1004,6 +1150,27 @@ export default function MyProfilePage() {
                   <>
                     <Edit2 className="h-4 w-4" />
                     편집
+                  </>
+                )}
+              </Button>
+              
+              {/* 별명 생성 버튼 추가 */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10 px-4 bg-purple-500 text-white hover:bg-purple-600 flex items-center gap-2"
+                onClick={generateUserProfile}
+                disabled={isGeneratingProfile}
+              >
+                {isGeneratingProfile ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    생성 중...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    별명 생성하기
                   </>
                 )}
               </Button>

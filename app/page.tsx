@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import OpenAI from 'openai';
 
+// 기본 이미지를 데이터 URI로 정의
+const placeholderImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3E%3Crect width='300' height='200' fill='%23cccccc'/%3E%3Ctext x='50%25' y='50%25' font-size='18' text-anchor='middle' alignment-baseline='middle' font-family='Arial, sans-serif' fill='%23666666'%3E이미지를 찾을 수 없습니다%3C/text%3E%3C/svg%3E";
+
 // OpenAI 클라이언트 초기화 수정
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
@@ -112,6 +115,50 @@ export default function Home() {
     setWatchHistory(savedHistory);
     const savedClusters = JSON.parse(localStorage.getItem('watchClusters') || '[]');
     setClusters(savedClusters);
+  }, []);
+
+  // 데이터 마이그레이션을 위한 useEffect 추가
+  useEffect(() => {
+    // 로컬 스토리지에서 기존 데이터 마이그레이션
+    const migrateLocalStorageData = () => {
+      try {
+        // 클러스터 이미지 마이그레이션
+        const storedClusterImages = localStorage.getItem('clusterImages');
+        if (storedClusterImages) {
+          const parsedClusterImages = JSON.parse(storedClusterImages);
+          
+          // 각 클러스터 이미지 마이그레이션
+          const migratedClusterImages: Record<string, any> = {};
+          
+          Object.entries(parsedClusterImages).forEach(([key, value]: [string, any]) => {
+            // alt 필드가 있고 main_keyword 필드가 없는 경우에만 마이그레이션
+            if (value && typeof value === 'object') {
+              migratedClusterImages[key] = {
+                ...value,
+                main_keyword: key, // 키를 main_keyword로 사용
+              };
+            } else {
+              migratedClusterImages[key] = value;
+            }
+          });
+          
+          // 마이그레이션된 데이터 저장
+          localStorage.setItem('clusterImages', JSON.stringify(migratedClusterImages));
+          console.log('클러스터 이미지 데이터 마이그레이션 완료');
+        }
+        
+        // 마이그레이션 완료 표시
+        localStorage.setItem('clusterDataMigrationCompleted', 'true');
+      } catch (error) {
+        console.error('데이터 마이그레이션 중 오류 발생:', error);
+      }
+    };
+    
+    // 마이그레이션이 이미 완료되었는지 확인
+    const migrationCompleted = localStorage.getItem('clusterDataMigrationCompleted');
+    if (migrationCompleted !== 'true') {
+      migrateLocalStorageData();
+    }
   }, []);
 
   // YouTube 동영상 ID 추출 함수
@@ -257,6 +304,8 @@ ${topKeywords.map(k => `${k.keyword} (${k.count}회)`).join('\n')}
 2. 각 그룹은 최소 3개 이상의 연관된 영상을 포함해야 합니다.
 3. 하나의 영상이 여러 그룹에 포함될 수 있습니다.
 4. 각 그룹은 사용자의 뚜렷한 관심사나 취향을 나타내야 합니다.
+4-2. 키워드 간 유사성과 맥락을 파악하여 유사한 키워드를 그룹지어주세요.
+4-3. 클러스터 내 키워드 간 관계를 분석하여 의미적 연결성 확인.
 5. 클러스터 수에 제한은 없으나, 최소 5개 이상의 클러스터를 만들어주세요.
 6. 자주 등장하는 키워드(상위 10개)를 중심으로 클러스터를 우선적으로 형성해주세요.
 7. 특정 인물이 자주 등장할 경우, 해당 인물을 중심으로 별도 클러스터를 만들어주세요.
@@ -275,7 +324,8 @@ ${topKeywords.map(k => `${k.keyword} (${k.count}회)`).join('\n')}
 
 3. 연관 키워드:
 - 핵심 키워드와 관련된 주요 키워드들
-- 출현 빈도와 연관성을 고려하여 선정
+- 영상에서 추출된 키워드 중, 의미적 연결성이 검증된 키워드를 이미 추출된 키워드에서 선별
+-출현 빈도와 연관성을 고려하여 선정
 - 해당 그룹의 특성을 잘 나타내는 키워드들
 
 4. 감성과 태도:
@@ -767,9 +817,24 @@ CLUSTER_END`;
   };
 
   // 이미지 검색 함수 수정
-  const searchClusterImage = async (cluster: any): Promise<ClusterImage | null> => {
+  const searchClusterImage = async (cluster: any) => {
     try {
-      const searchQuery = cluster.main_keyword.includes('인물')
+      // 이미 시도한 적이 있는지 확인
+      const imageAttemptKey = `imageAttempt_${cluster.main_keyword}`;
+      const hasAttempted = localStorage.getItem(imageAttemptKey);
+      
+      if (hasAttempted === 'failed') {
+        console.log('이전에 이미지 검색 실패 기록이 있습니다. 기본 이미지 사용:', cluster.main_keyword);
+        return {
+          url: placeholderImage, // 데이터 URI 사용
+          credit: {
+            name: 'Default Image',
+            link: '#'
+          }
+        };
+      }
+
+      const searchQuery = cluster.main_keyword.includes('인물') 
         ? `${cluster.main_keyword} 인물사진`
         : `${cluster.main_keyword} ${cluster.category}`;
 
@@ -786,8 +851,9 @@ CLUSTER_END`;
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API error: ${response.status}`);
+        // 실패 기록 저장
+        localStorage.setItem(imageAttemptKey, 'failed');
+        throw new Error(`API error: ${response.status}`);
       }
 
       const data = await response.json();
@@ -806,14 +872,36 @@ CLUSTER_END`;
         const savedImages = JSON.parse(localStorage.getItem('clusterImages') || '{}');
         savedImages[cluster.main_keyword] = image;
         localStorage.setItem('clusterImages', JSON.stringify(savedImages));
+        
+        // 성공 기록 저장
+        localStorage.setItem(imageAttemptKey, 'success');
 
         return image;
       }
 
-      return null;
+      // 결과가 없는 경우 실패 기록 저장
+      localStorage.setItem(imageAttemptKey, 'failed');
+      return {
+        url: placeholderImage, // 데이터 URI 사용
+        credit: {
+          name: 'Default Image',
+          link: '#'
+        }
+      };
     } catch (error) {
       console.error('이미지 검색 실패:', error);
-      return null;
+      
+      // 실패 기록 저장
+      const imageAttemptKey = `imageAttempt_${cluster.main_keyword}`;
+      localStorage.setItem(imageAttemptKey, 'failed');
+      
+      return {
+        url: placeholderImage, // 데이터 URI 사용
+        credit: {
+          name: 'Default Image',
+          link: '#'
+        }
+      };
     }
   };
 
@@ -1092,19 +1180,47 @@ CLUSTER_END`;
 
                           {/* 클러스터 대표 이미지 */}
                           {clusterImages[index] && (
-                            <div className="relative w-full h-48 mb-4 rounded-lg overflow-hidden">
+                            <div className="relative w-full h-64 mb-4 rounded-lg overflow-hidden">
                               <img
-                                src={clusterImages[index]?.url}
+                                src={clusterImages[index]?.url || placeholderImage}
                                 alt={cluster.main_keyword}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain bg-gray-100"
                                 onError={(e) => {
                                   console.error('이미지 로드 실패:', e);
                                   const target = e.target as HTMLImageElement;
-                                  target.src = '/placeholder-image.jpg';
+                                  
+                                  // 이미 재시도했는지 확인
+                                  if (target.dataset.retried === 'true') {
+                                    console.log('이미 재시도했습니다. 더 이상 시도하지 않습니다.');
+                                    return; // 이미 재시도했으면 더 이상 처리하지 않음
+                                  }
+                                  
+                                  // 재시도 표시
+                                  target.dataset.retried = 'true';
+                                  
+                                  // 데이터 URI 사용
+                                  target.src = placeholderImage;
+                                  
+                                  // 이미지 로드 실패 시 로컬 스토리지에 실패 기록 저장
+                                  const imageAttemptKey = `imageAttempt_${cluster.main_keyword}`;
+                                  localStorage.setItem(imageAttemptKey, 'failed');
+                                  
+                                  // 이미지 상태 업데이트
+                                  setClusterImages(prev => {
+                                    const newImages = { ...prev };
+                                    newImages[index] = {
+                                      url: placeholderImage,
+                                      credit: {
+                                        name: 'Default Image',
+                                        link: '#'
+                                      }
+                                    };
+                                    return newImages;
+                                  });
                                 }}
                               />
                               <div className="absolute bottom-0 right-0 p-2 text-xs text-white bg-black bg-opacity-50">
-                                출처: Naver
+                                출처: {clusterImages[index]?.credit?.name || 'Default'}
                               </div>
                             </div>
                           )}
@@ -1194,25 +1310,28 @@ CLUSTER_END`;
             <div className="mt-6">
               <h3 className="text-lg font-medium mb-4">최근 분석된 영상</h3>
               <div className="space-y-3">
-                {watchHistory.slice(0, 5).map((item, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-4">
-                    <a 
-                      href={item.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="font-medium hover:text-blue-600"
-                    >
-                      {item.title}
-                    </a>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {item.keywords?.map((keyword: string, kidx: number) => (
-                        <span key={kidx} className="px-2 py-1 bg-blue-100 rounded-full text-sm">
-                          {keyword}
-                        </span>
-                      ))}
+                {watchHistory
+                  .sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()) // 최신순 정렬
+                  .slice(0, 5)
+                  .map((item, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4">
+                      <a 
+                        href={item.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="font-medium hover:text-blue-600"
+                      >
+                        {item.title}
+                      </a>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {item.keywords?.map((keyword: string, kidx: number) => (
+                          <span key={kidx} className="px-2 py-1 bg-blue-100 rounded-full text-sm">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
