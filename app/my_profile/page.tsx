@@ -125,16 +125,24 @@ function DraggableImage({
     transition: isEditing ? 'none' : 'transform 0.8s ease-in-out'
   };
 
-  const completion = openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    store: true,
-    messages: [
-      {"role": "user", "content": "write a haiku about ai"},
-    ],
-  });
-  
-  completion.then((result) => console.log(result.choices[0].message));
-  
+  useEffect(() => {
+    const generateHaiku = async () => {
+      try {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {"role": "user", "content": "write a haiku about ai"},
+          ],
+        });
+        console.log(completion.choices[0].message);
+      } catch (error) {
+        console.error('OpenAI API 호출 오류:', error);
+      }
+    };
+
+    // generateHaiku(); // 필요할 때만 주석 해제
+  }, []);
+
   const getClipPath = () => {
     switch (frameStyle) {
       case 'inspiration':
@@ -228,7 +236,7 @@ function DraggableImage({
     return () => {
       // 필요한 정리 작업
     };
-  }, []); // 의존성 배열 비움 - 컴포넌트 마운트 시 한 번만 실행
+  }, []);
 
   const handleVideoClick = (video: VideoData) => {
     // 로컬 스토리지에서 현재 시청 기록 가져오기
@@ -854,6 +862,7 @@ export default function MyProfilePage() {
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [images, setImages] = useState<ImageData[]>(myProfileImages);
+  const [visibleImageIds, setVisibleImageIds] = useState<Set<string>>(new Set());
 
   const [profile, setProfile] = useState({
     nickname: '',
@@ -973,7 +982,7 @@ export default function MyProfilePage() {
     }
   }, []);
 
-  // 히스토리 재생 효과
+  // 히스토리 재생 효과 수정
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
@@ -985,17 +994,49 @@ export default function MyProfilePage() {
             setIsPlaying(false);
             return prev;
           }
+          
+          // 다음 히스토리의 이미지 ID 목록 가져오기
+          const nextHistoryImageIds = new Set(histories[nextIndex].images.map(img => img.id));
+          setVisibleImageIds(nextHistoryImageIds);
+          
           setPositions(histories[nextIndex].positions);
           setFrameStyles(histories[nextIndex].frameStyles || {});
           return nextIndex;
         });
-      }, 2000); // 2초마다 다음 히스토리로 전환 (애니메이션 시간 고려)
+      }, 2000);
     }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
   }, [isPlaying, histories]);
+
+  // 히스토리 클릭 핸들러 수정
+  const handleHistoryClick = (index: number) => {
+    if (currentHistoryIndex === index) return;
+    
+    // 선택한 히스토리의 이미지 ID 목록 가져오기
+    const selectedHistoryImageIds = new Set(histories[index].images.map(img => img.id));
+    setVisibleImageIds(selectedHistoryImageIds);
+    
+    setCurrentHistoryIndex(index);
+    setPositions(histories[index].positions);
+    setFrameStyles(histories[index].frameStyles || {});
+  };
+
+  // 히스토리 재생 시작 핸들러 수정
+  const handlePlayHistory = () => {
+    if (histories.length > 0) {
+      // 첫 번째 히스토리의 이미지 ID 목록 가져오기
+      const firstHistoryImageIds = new Set(histories[0].images.map(img => img.id));
+      setVisibleImageIds(firstHistoryImageIds);
+      
+      setCurrentHistoryIndex(0);
+      setPositions(histories[0].positions);
+      setFrameStyles(histories[0].frameStyles || {});
+      setIsPlaying(true);
+    }
+  };
 
   const handleFrameStyleChange = (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => {
     setFrameStyles(prev => ({
@@ -1017,22 +1058,6 @@ export default function MyProfilePage() {
     localStorage.setItem('moodboardHistories', JSON.stringify(updatedHistories));
     setCurrentHistoryIndex(updatedHistories.length - 1);
     setIsEditing(false);
-  };
-
-  const handleHistoryClick = (index: number) => {
-    if (currentHistoryIndex === index) return;
-    setCurrentHistoryIndex(index);
-    setPositions(histories[index].positions);
-    setFrameStyles(histories[index].frameStyles || {});
-  };
-
-  const handlePlayHistory = () => {
-    if (histories.length > 0) {
-      setCurrentHistoryIndex(0);
-      setPositions(histories[0].positions);
-      setFrameStyles(histories[0].frameStyles || {});
-      setIsPlaying(true);
-    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -1332,19 +1357,27 @@ ${clusters.map((cluster: any, index: number) => `
           <div className="relative w-[1000px] h-[800px] mx-auto mt-8">
             <DndContext onDragEnd={handleDragEnd}>
               {images.map((image) => (
-                <DraggableImage
+                <div
                   key={image.id}
-                  image={image}
-                  position={positions[image.id]}
-                  isEditing={isEditing && !isSearchMode}
-                  positions={positions}
-                  frameStyle={frameStyles[image.id] || 'healing'}
-                  onFrameStyleChange={handleFrameStyleChange}
-                  onImageChange={handleImageChange}
-                  onImageSelect={handleImageSelect}
-                  isSelected={selectedImages.some(img => img.id === image.id)}
-                  isSearchMode={isSearchMode}
-                />
+                  className={`transition-all duration-500 ${
+                    isEditing || visibleImageIds.has(image.id)
+                      ? 'opacity-100 scale-100'
+                      : 'opacity-0 scale-95 pointer-events-none'
+                  }`}
+                >
+                  <DraggableImage
+                    image={image}
+                    position={positions[image.id]}
+                    isEditing={isEditing && !isSearchMode}
+                    positions={positions}
+                    frameStyle={frameStyles[image.id] || 'healing'}
+                    onFrameStyleChange={handleFrameStyleChange}
+                    onImageChange={handleImageChange}
+                    onImageSelect={handleImageSelect}
+                    isSelected={selectedImages.some(img => img.id === image.id)}
+                    isSearchMode={isSearchMode}
+                  />
+                </div>
               ))}
             </DndContext>
           </div>
