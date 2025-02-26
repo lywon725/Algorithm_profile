@@ -867,6 +867,7 @@ export default function MyProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
   // 데이터 마이그레이션을 위한 useEffect 추가
   useEffect(() => {
@@ -1151,61 +1152,78 @@ ${clusters.map((cluster: any, index: number) => `
     setSelectedImage(image);
   };
 
+  // 검색 모드 토글 함수
+  const toggleSearchMode = () => {
+    setIsSearchMode(!isSearchMode);
+  };
+
   return (
     <main className="min-h-screen p-4 relative">
       <div className="relative z-20 w-full">
         <div className="max-w-[1200px] mx-auto">
-          <div className="absolute z-30 pl-8 max-w-[600px] space-y-6">
-            <div className="flex items-center justify-between">
-              <h1 className="text-5xl font-bold tracking-tight">
-                {profile.nickname ? `${profile.nickname}의 무드보드` : 'My 무드보드'}
+          {/* 검색 모드일 때 표시되는 제목 */}
+          {isSearchMode && (
+            <div className="absolute top-8 left-0 right-0 text-center z-40">
+              <h1 className="text-4xl font-bold text-blue-600">
+                Explore someone's interest based on your interest
               </h1>
             </div>
-            <p className="text-gray-500 text-lg leading-relaxed mt-4">
-              {profile.description || '나만의 알고리즘 프로필을 생성해보세요.'}
-            </p>
-            <div className="flex gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 px-4 bg-blue-500 text-white hover:bg-blue-600 flex items-center gap-2"
-                onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-              >
-                {isEditing ? (
-                  <>
-                    <Save className="h-4 w-4" />
-                    저장
-                  </>
-                ) : (
-                  <>
-                    <Edit2 className="h-4 w-4" />
-                    편집
-                  </>
-                )}
-              </Button>
-              
-              {/* 별명 생성 버튼 추가 */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 px-4 bg-purple-500 text-white hover:bg-purple-600 flex items-center gap-2"
-                onClick={generateUserProfile}
-                disabled={isGeneratingProfile}
-              >
-                {isGeneratingProfile ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    생성 중...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    별명 생성하기
-                  </>
-                )}
-              </Button>
+          )}
+          
+          {/* 기존 제목과 설명 (검색 모드가 아닐 때만 표시) */}
+          {!isSearchMode && (
+            <div className="absolute z-30 pl-8 max-w-[600px] space-y-6">
+              <div className="flex items-center justify-between">
+                <h1 className="text-5xl font-bold tracking-tight">
+                  {profile.nickname ? `${profile.nickname}의 무드보드` : 'My 무드보드'}
+                </h1>
+              </div>
+              <p className="text-gray-500 text-lg leading-relaxed mt-4">
+                {profile.description || '나만의 알고리즘 프로필을 생성해보세요.'}
+              </p>
+              <div className="flex gap-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 px-4 bg-blue-500 text-white hover:bg-blue-600 flex items-center gap-2"
+                  onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                >
+                  {isEditing ? (
+                    <>
+                      <Save className="h-4 w-4" />
+                      저장
+                    </>
+                  ) : (
+                    <>
+                      <Edit2 className="h-4 w-4" />
+                      편집
+                    </>
+                  )}
+                </Button>
+                
+                {/* 별명 생성 버튼 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 px-4 bg-purple-500 text-white hover:bg-purple-600 flex items-center gap-2"
+                  onClick={generateUserProfile}
+                  disabled={isGeneratingProfile}
+                >
+                  {isGeneratingProfile ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      생성 중...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      별명 생성하기
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="relative w-[1000px] h-[800px] mx-auto mt-8">
             <DndContext onDragEnd={handleDragEnd}>
@@ -1214,7 +1232,7 @@ ${clusters.map((cluster: any, index: number) => `
                   key={image.id}
                   image={image}
                   position={positions[image.id]}
-                  isEditing={isEditing}
+                  isEditing={isEditing && !isSearchMode} // 검색 모드일 때는 편집 비활성화
                   positions={positions}
                   frameStyle={frameStyles[image.id] || 'healing'}
                   onFrameStyleChange={handleFrameStyleChange}
@@ -1225,25 +1243,29 @@ ${clusters.map((cluster: any, index: number) => `
             </DndContext>
           </div>
 
-          {/* 플로팅 검색 버튼 */}
+          {/* 플로팅 검색 버튼 (토글 기능 추가) */}
           <div className="fixed top-32 right-8 z-50 group">
             <button
-              onClick={() => {/* 검색 기능 구현 */}}
-              className="w-16 h-16 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
-              aria-label="검색하기"
+              onClick={toggleSearchMode}
+              className={`w-16 h-16 ${
+                isSearchMode ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
+              } text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110`}
+              aria-label={isSearchMode ? '검색 모드 종료' : '검색하기'}
             >
               <Search className="w-7 h-7" />
             </button>
             <div className="absolute right-0 top-full mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className="bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg whitespace-nowrap text-sm">
-                나와 비슷한 관심사를 가진 사람의 알고리즘 프로필을 찾아보세요!
+                {isSearchMode 
+                  ? '검색 모드를 종료하고 내 프로필로 돌아갑니다' 
+                  : '나와 비슷한 관심사를 가진 사람의 알고리즘 프로필을 찾아보세요!'}
               </div>
               <div className="absolute -top-1 right-6 w-2 h-2 bg-gray-900 transform rotate-45" />
             </div>
           </div>
 
-          {/* 히스토리 슬라이더 */}
-          {histories.length > 0 && !isEditing && (
+          {/* 히스토리 슬라이더 (검색 모드가 아닐 때만 표시) */}
+          {histories.length > 0 && !isEditing && !isSearchMode && (
             <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 w-[800px] bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex flex-col">

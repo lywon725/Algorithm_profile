@@ -1020,7 +1020,7 @@ CLUSTER_END`;
             size="lg" 
             className="bg-gradient-to-r from-blue-500 to-purple-500 hover:opacity-90 transition-all px-16 py-8 text-2xl font-semibold rounded-full shadow-xl hover:scale-105"
           >
-            <Link href="/login">
+            <Link href="/my_profile">
               Create Profile
             </Link>
           </Button>
