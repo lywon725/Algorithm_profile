@@ -26,8 +26,133 @@ export type ProfileData = {
   images: ImageData[];
 };
 
-// 더미 프로필 데이터
+// 내 프로필용 이미지 데이터
+export const myProfileImages: ImageData[] = [
+  {
+    id: "1",
+    src: "/images/jd.jpg",
+    main_keyword: "지디",
+    width: 250,
+    height: 250,
+    rotate: -6,
+    left: "10%",
+    top: "20%",
+    color: "yellow",
+    keywords: ["유명인", "인기", "특이한"],
+    sizeWeight: 2,
+    relatedVideos: [
+      {
+        title: "치인다는 지디 실제 말투 #gd #광희 #카톡",
+        embedId: "vKUvZwPk72w"
+      },
+      {
+        title: "지디가 직접 말하는 MBTI",
+        embedId: "07QjgJfrSNM"
+      }
+    ]
+  },
+  {
+    id: "2",
+    src: "/images/changbin.jpg",
+    main_keyword: "창빈",
+    width: 250,
+    height: 250,
+    rotate: 3,
+    left: "50%",
+    top: "0%",
+    color: "pink",
+    keywords: ["채령", "다정함", "사랑스러운"],
+    sizeWeight: 5,
+    relatedVideos: [
+      {
+        title: " 남녀 사이에 친구가 있다고 믿는 아이돌 TOP4",
+        embedId: "vTvUBnBPWhM"
+      },
+      {
+        title: " 창빈님의 다정함이 너무 오글거렸던 채령",
+        embedId: "eqZA0z_bLHg"
+      },
+      {
+        title: " 창빈X채령 연습생 때 친해진 계기",
+        embedId: "eojlzOjPhiI"
+      },
+      {
+        title: "Stray Kids ITZY Cut Ryujin, Yuna, Yeji, Chaeryeong",
+        embedId: "5DEmWyekHx4"
+      },
+      {
+        title: "전설의 JYP 3대 웃수저 ㅋㅋㅋㅋ",
+        embedId: "D4jPZXrOF3Y"
+      }
+    ]
+  },
+  {
+    id: "3",
+    src: "/images/laughing.jpg",
+    main_keyword: "유머",
+    width: 280,
+    height: 200,
+    rotate: -12,
+    left: "20%",
+    top: "45%",
+    color: "blue",
+    keywords: ["유쾌한", "밝은", "웃김"],
+    sizeWeight: 3,
+    relatedVideos: [
+      {
+        title: "보는 사람이 더 민망한 오해원의 애교",
+        embedId: "yBHW52P34to"
+      },
+      {
+        title: "[르세라핌 LE SSERAFIM] 턱이요?",
+        embedId: "r-eA0zHtrHU"
+      },
+      {
+        title: "야노시호가 말하는 일본에서 추성훈 인기정도",
+        embedId: "I_mrEE08Cvo"
+      }
+    ]
+  },
+  {
+    id: "4",
+    src: "/images/travel.jpg",
+    main_keyword: "여행",
+    width: 320,
+    height: 250,
+    rotate: 6,
+    left: "60%",
+    top: "40%",
+    color: "green",
+    keywords: ["세계여행", "도전", "관광객", "탐험하는"],
+    sizeWeight: 3,
+    relatedVideos: [
+      {
+        title: "태국 깊은 산 속 어딘가..",
+        embedId: "P9rzOFoVWhM"
+      },
+      {
+        title: "한국에 다시는 안온다는 관강객 ㄷㄷ",
+        embedId: "5i0n89NMEtY"
+      },
+      {
+        title: "최정상 피겨선수가 얼음판을 맛보는 이유",
+        embedId: "ZV1ZaQkaHcM"
+      }
+    ]
+  }
+];
+
+// 내 프로필 데이터도 dummyProfiles에 포함
+export const myProfile: ProfileData = {
+  id: 0, // 내 프로필은 ID 0으로 설정
+  nickname: "나의 알고리즘",
+  description: "나의 관심사와 취향을 담은 알고리즘 프로필입니다.",
+  images: myProfileImages
+};
+
+// 다른 사용자들의 프로필 데이터
 export const dummyProfiles: ProfileData[] = [
+  myProfile, // 내 프로필을 첫 번째로 추가
   {
     id: 1,
     nickname: "자연 탐험가",
