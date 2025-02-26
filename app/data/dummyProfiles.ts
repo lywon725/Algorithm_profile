@@ -27,6 +27,7 @@ export type ImageData = {
   created_at: string;
   desired_self: boolean;
   metadata: any;
+  desired_self_profile: string | null;
 };
 
 export type ProfileData = {
@@ -65,7 +66,8 @@ export const myProfileImages: ImageData[] = [
     ],
     created_at: new Date().toISOString(),
     desired_self: false,
-    metadata: {}
+    metadata: {},
+    desired_self_profile: null
   },
   {
     id: "2",
@@ -106,7 +108,8 @@ export const myProfileImages: ImageData[] = [
     ],
     created_at: new Date().toISOString(),
     desired_self: false,
-    metadata: {}
+    metadata: {},
+    desired_self_profile: null
   },
   {
     id: "3",
@@ -139,7 +142,8 @@ export const myProfileImages: ImageData[] = [
     ],
     created_at: new Date().toISOString(),
     desired_self: false,
-    metadata: {}
+    metadata: {},
+    desired_self_profile: null
   },
   {
     id: "4",
@@ -172,7 +176,8 @@ export const myProfileImages: ImageData[] = [
     ],
     created_at: new Date().toISOString(),
     desired_self: false,
-    metadata: {}
+    metadata: {},
+    desired_self_profile: null
   }
 ];
 
@@ -208,7 +213,8 @@ export const dummyProfiles: ProfileData[] = [
         top: "5%",
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "nature-2",
@@ -231,7 +237,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "nature-3",
@@ -254,7 +261,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "nature-4",
@@ -277,7 +285,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       }
     ]
   },
@@ -307,7 +316,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "city-2",
@@ -330,7 +340,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "city-3",
@@ -353,7 +364,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "city-4",
@@ -376,7 +388,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       }
     ]
   },
@@ -406,7 +419,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "food-2",
@@ -429,7 +443,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       }
     ]
   },
@@ -459,7 +474,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       },
       {
         id: "art-2",
@@ -482,7 +498,8 @@ export const dummyProfiles: ProfileData[] = [
         ],
         created_at: new Date().toISOString(),
         desired_self: false,
-        metadata: {}
+        metadata: {},
+        desired_self_profile: null
       }
     ]
   }

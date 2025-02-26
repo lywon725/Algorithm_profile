@@ -11,6 +11,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function OthersProfilePage() {
   const params = useParams();
@@ -20,6 +28,7 @@ export default function OthersProfilePage() {
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [watchedVideos, setWatchedVideos] = useState<string[]>([]);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   useEffect(() => {
     // URL에서 프로필 ID 가져오기
@@ -255,7 +264,8 @@ export default function OthersProfilePage() {
                         top: "30%",
                         rotate: 0,
                         sizeWeight: 0.3,
-                        desired_self: true
+                        desired_self: true,
+                        desired_self_profile: profile.id
                       };
                       
                       const newHistory = {
@@ -271,7 +281,7 @@ export default function OthersProfilePage() {
                       histories.push(newHistory);
                       localStorage.setItem('moodboardHistories', JSON.stringify(histories));
                       
-                      alert('이미지가 무드보드에 추가되었습니다!');
+                      setShowSuccessDialog(true);
                     } catch (error) {
                       console.error('히스토리 저장 중 오류:', error);
                       alert('이미지 저장 중 오류가 발생했습니다.');
@@ -413,6 +423,31 @@ export default function OthersProfilePage() {
           </SheetContent>
         </Sheet>
       )}
+
+      {/* 성공 다이얼로그 */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>이미지 추가 완료</DialogTitle>
+            <DialogDescription>
+              이미지가 성공적으로 무드보드에 추가되었습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex justify-end gap-3 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setShowSuccessDialog(false)}
+            >
+              다음에
+            </Button>
+            <Button
+              onClick={() => router.push('/my_profile')}
+            >
+              마이페이지 가기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
@@ -420,8 +455,8 @@ export default function OthersProfilePage() {
 // 프레임 스타일 가져오기
 function getFrameStyle(image: ImageData): string {
   // frameStyle이 'star'인 경우 빈 문자열 반환 (clip-path가 적용되도록)
-  if (image.frameStyle === 'star') {
-    return '';
+  if (image.desired_self === true) {
+    return 'star';
   }
   
   // 기존 로직 유지
