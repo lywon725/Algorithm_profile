@@ -110,6 +110,9 @@ export default function OthersProfilePage() {
                 key={image.id}
                 className={`absolute transition-all duration-500 cursor-pointer hover:scale-105 hover:z-30`}
                 style={{
+                  position: 'absolute',
+                  width: `${image.width * image.sizeWeight * 4}px`,
+                  height: `${(image.height + 80) * image.sizeWeight * 4}px`,
                   left: image.left,
                   top: image.top,
                   transform: `rotate(${image.rotate}deg)`,
@@ -191,26 +194,91 @@ export default function OthersProfilePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 h-[calc(100%-80px)] overflow-y-auto">
               {/* 이미지 섹션 */}
-              <div className="aspect-square rounded-lg overflow-hidden">
-                <img
-                  src={selectedImage.src}
-                  alt={selectedImage.main_keyword}
-                  className="w-full h-full object-cover"
-                />
+              <div className="relative">
+                <div className="aspect-square rounded-lg overflow-hidden">
+                  <img
+                    src={selectedImage.src}
+                    alt={selectedImage.main_keyword}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                {/* 카테고리 뱃지 */}
+                <div className="absolute top-4 right-4">
+                  <span className="px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white font-medium">
+                    {selectedImage.category}
+                  </span>
+                </div>
               </div>
 
               {/* 정보 섹션 */}
-              <div className="flex flex-col">
-                {/* 키워드 */}
-                <div className="mb-4">
-                  <h3 className="text-lg font-semibold mb-2">키워드</h3>
+              <div className="flex flex-col gap-6">
+                {/* 키워드 카드들 */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                    <h4 className="text-sm font-medium text-emerald-600 mb-2">메인 키워드</h4>
+                    <p className="text-xl font-bold text-emerald-900">#{selectedImage.main_keyword}</p>
+                  </div>
+                  
+                  <div className="bg-purple-50 rounded-xl p-4 text-center">
+                    <h4 className="text-sm font-medium text-purple-600 mb-2">감성/분위기</h4>
+                    <p className="text-xl font-bold text-purple-900">#{selectedImage.mood_keyword}</p>
+                  </div>
+                  
+                  <div className="bg-blue-50 rounded-xl p-4 text-center">
+                    <h4 className="text-sm font-medium text-blue-600 mb-2">서브 키워드</h4>
+                    <p className="text-xl font-bold text-blue-900">#{selectedImage.sub_keyword}</p>
+                  </div>
+                </div>
+
+                {/* 관심도 섹션 */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-800">관심도</h4>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedImage.sizeWeight >= 1.2 ? "bg-red-100 text-red-700" :
+                      selectedImage.sizeWeight >= 0.8 ? "bg-yellow-100 text-yellow-700" :
+                      "bg-blue-100 text-blue-700"
+                    }`}>
+                      {selectedImage.sizeWeight >= 1.2 ? "강" :
+                       selectedImage.sizeWeight >= 0.8 ? "중" : "약"}
+                    </span>
+                  </div>
+                  
+                  {/* 게이지 바 */}
+                  <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                        selectedImage.sizeWeight >= 1.2 ? "bg-gradient-to-r from-red-400 to-red-500" :
+                        selectedImage.sizeWeight >= 0.8 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
+                        "bg-gradient-to-r from-blue-400 to-blue-500"
+                      }`}
+                      style={{ width: `${Math.min(selectedImage.sizeWeight * 50, 100)}%` }}
+                    />
+                  </div>
+
+                  <p className="mt-3 text-sm text-gray-600">
+                    {selectedImage.sizeWeight >= 1.2 ? "이 주제에 대한 높은 관심도를 보입니다" :
+                     selectedImage.sizeWeight >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
+                     "이 주제에 대해 가볍게 관심을 두고 있습니다"}
+                  </p>
+                </div>
+
+                {/* 이미지 설명 */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h4 className="text-lg font-semibold mb-3">이미지 설명</h4>
+                  <p className="text-gray-700">{selectedImage.description}</p>
+                </div>
+
+                {/* 관련 키워드 */}
+                <div>
+                  <h4 className="text-lg font-semibold mb-3">관련 키워드</h4>
                   <div className="flex flex-wrap gap-2">
                     {selectedImage.keywords.map((keyword, idx) => (
                       <span
                         key={idx}
-                        className="bg-gray-100 px-3 py-1 rounded-full text-sm"
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors"
                       >
-                        {keyword}
+                        #{keyword}
                       </span>
                     ))}
                   </div>
