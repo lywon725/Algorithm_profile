@@ -82,6 +82,7 @@ type DraggableImageProps = {
   frameStyle: 'healing' | 'inspiration' | 'people' | 'interest';
   onFrameStyleChange: (id: string, style: 'healing' | 'inspiration' | 'people' | 'interest') => void;
   onImageChange: (id: string, newSrc: string, newKeyword: string) => void;
+  onImageSelect: (image: ImageData) => void;
 };
 
 function DraggableImage({ 
@@ -92,6 +93,7 @@ function DraggableImage({
   frameStyle,
   onFrameStyleChange,
   onImageChange,
+  onImageSelect,
 }: DraggableImageProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: image.id,
@@ -102,6 +104,8 @@ function DraggableImage({
   const [showImageModal, setShowImageModal] = useState(false);
   const [alternativeImages, setAlternativeImages] = useState<UnsplashImage[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
+  const [aiRecommendedVideos, setAiRecommendedVideos] = useState<VideoData[]>([]);
+  const [isLoadingAiVideos, setIsLoadingAiVideos] = useState(false);
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(${image.rotate}deg)`,
@@ -339,6 +343,51 @@ function DraggableImage({
     }
   };
 
+  // 이미지 클릭 핸들러 추가
+  const handleImageClick = () => {
+    if (!isEditing) {
+      onImageSelect(image); // 부모 컴포넌트에 선택된 이미지 전달
+    }
+  };
+
+  // YouTube API로 AI 추천 비디오 가져오기
+  const fetchAiRecommendedVideos = useCallback(async () => {
+    if (!image.main_keyword) return;
+    
+    setIsLoadingAiVideos(true);
+    try {
+      // 주요 키워드와 랜덤 키워드 조합으로 검색
+      const randomKeyword = image.keywords[Math.floor(Math.random() * image.keywords.length)];
+      const searchQuery = `${image.main_keyword} ${randomKeyword}`;
+      
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&type=video&maxResults=4&regionCode=KR&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+      );
+
+      const data = await response.json();
+      
+      if (data.items) {
+        const videoList = data.items.map((item: any) => ({
+          title: item.snippet.title,
+          embedId: item.id.videoId
+        }));
+        setAiRecommendedVideos(videoList);
+      }
+    } catch (error) {
+      console.error('AI 추천 비디오 가져오기 오류:', error);
+      setAiRecommendedVideos([]);
+    } finally {
+      setIsLoadingAiVideos(false);
+    }
+  }, [image.main_keyword, image.keywords]);
+
+  // 이미지가 선택되었을 때 AI 추천 비디오 가져오기
+  useEffect(() => {
+    if (!isEditing) {
+      fetchAiRecommendedVideos();
+    }
+  }, [fetchAiRecommendedVideos, isEditing]);
+
   return (
     <>
       <Sheet>
@@ -411,7 +460,10 @@ function DraggableImage({
           )}
           {!isEditing && (
             <SheetTrigger asChild>
-              <div className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group">
+              <div 
+                className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group"
+                onClick={handleImageClick}
+              >
                 <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
                   <div
                     style={{
@@ -497,38 +549,14 @@ function DraggableImage({
                   <Tabs defaultValue="history" className="w-full">
                     <div className="bg-gray-70/70 rounded-lg">
                       <TabsList className="w-full grid grid-cols-2 py-0">
-                        <TabsTrigger value="history" className="text-xl py-1">where this image came from</TabsTrigger>
-                        <TabsTrigger value="ai" className="text-xl py-1">Algorithm Alley</TabsTrigger>
+                        <TabsTrigger value="history" className="text-xl py-1">Where this image from</TabsTrigger>
+                        <TabsTrigger value="AI" className="text-xl py-1">The way Algorithm see you</TabsTrigger>
                       </TabsList>
                       <br/> <br/>
+                      
                       <TabsContent value="history" className="px-6 pb-6">
                         <div className="grid gap-8">
-                          {[
-                            {
-                              title: "따뜻한 감성의 일상 브이로그",
-                              embedId: "gQHvqQw0GzM"
-                            },
-                            {
-                              title: "포근한 주말 아침 일상",
-                              embedId: "D3ZFtSUDNQM"
-                            },
-                            {
-                              title: "감성 사진 촬영 팁",
-                              embedId: "BQHgmqZqwYY"
-                            },
-                            {
-                              title: "힐링되는 감성 영상",
-                              embedId: "D4jPZXrOF3Y"
-                            },
-                            {
-                              title: "밤의 여유로운 재즈 카페",
-                              embedId: "cJWBJ4uYVHk"
-                            },
-                            {
-                              title: "편안한 밤 분위기 음악",
-                              embedId: "DrmcAh2FRHQ"
-                            }
-                          ].map((video, idx) => (
+                          {image.relatedVideos.map((video, idx) => (
                             <div key={idx} className="space-y-2">
                               <h5 className="text-lg font-medium text-gray-800 mb-2">{video.title}</h5>
                               <div 
@@ -561,64 +589,60 @@ function DraggableImage({
                           ))}
                         </div>
                       </TabsContent>
-                      <TabsContent value="ai" className="px-6 pb-6">
+                      
+                      <TabsContent value="AI" className="px-6 pb-6">
                         <div className="grid gap-8">
-                          {[
-                            {
-                              title: "AI 추천: 감성적인 일상 브이로그",
-                              embedId: "QpQNemr-m2c"
-                            },
-                            {
-                              title: "AI 추천: 힐링되는 자연 소리",
-                              embedId: "qRXBGIK7Rqk"
-                            },
-                            {
-                              title: "AI 추천: 아늑한 집에서의 하루",
-                              embedId: "ZVrGw8QnqWY"
-                            },
-                            {
-                              title: "AI 추천: 편안한 홈카페 브이로그",
-                              embedId: "X2mnHpqiHGQ"
-                            },
-                            {
-                              title: "AI 추천: 일상의 기록, 폴라로이드",
-                              embedId: "hZONJ8XnKHE"
-                            },
-                            {
-                              title: "AI 추천: 평화로운 자연 풍경",
-                              embedId: "BHACKCNDMW8"
-                            }
-                          ].map((video, idx) => (
-                            <div key={idx} className="space-y-2">
-                              <h5 className="text-lg font-medium text-gray-800 mb-2">{video.title}</h5>
-                              <div 
-                                className="relative w-full pt-[56.25%] bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
-                                onClick={() => handleVideoClick(video)}
-                              >
-                                <iframe
-                                  id={`player-${video.embedId}`}
-                                  className="absolute inset-0 w-full h-full"
-                                  src={`https://www.youtube.com/embed/${video.embedId}?enablejsapi=1`}
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                />
-                                <div className={`absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-sm transition-all duration-300 ${
-                                  watchedVideos.includes(video.embedId) 
-                                    ? "bg-green-500/80 text-white" 
-                                    : "bg-gray-900/80 text-gray-200"
-                                }`}>
-                                  <CheckCircle2 className={`h-4 w-4 ${
-                                    watchedVideos.includes(video.embedId)
-                                      ? "text-white"
-                                      : "text-gray-400"
-                                  }`} />
-                                  <span className="text-sm font-medium">
-                                    {watchedVideos.includes(video.embedId) ? "시청함" : "시청안함"}
-                                  </span>
+                          {isLoadingAiVideos ? (
+                            <div className="flex justify-center items-center py-12">
+                              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                            </div>
+                          ) : aiRecommendedVideos.length > 0 ? (
+                            aiRecommendedVideos.map((video, idx) => (
+                              <div key={idx} className="space-y-2">
+                                <h5 className="text-lg font-medium text-gray-800 mb-2">
+                                  <span className="text-blue-500 font-semibold">AI 추천:</span> {video.title}
+                                </h5>
+                                <div 
+                                  className="relative w-full pt-[56.25%] bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
+                                  onClick={() => handleVideoClick(video)}
+                                >
+                                  <iframe
+                                    id={`player-ai-${video.embedId}`}
+                                    className="absolute inset-0 w-full h-full"
+                                    src={`https://www.youtube.com/embed/${video.embedId}?enablejsapi=1`}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                  <div className={`absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-sm transition-all duration-300 ${
+                                    watchedVideos.includes(video.embedId) 
+                                      ? "bg-green-500/80 text-white" 
+                                      : "bg-gray-900/80 text-gray-200"
+                                  }`}>
+                                    <CheckCircle2 className={`h-4 w-4 ${
+                                      watchedVideos.includes(video.embedId)
+                                        ? "text-white"
+                                        : "text-gray-400"
+                                    }`} />
+                                    <span className="text-sm font-medium">
+                                      {watchedVideos.includes(video.embedId) ? "시청함" : "시청안함"}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-12">
+                              <p className="text-gray-500">
+                                '{image.main_keyword}' 키워드에 대한 AI 추천 영상을 가져올 수 없습니다.
+                              </p>
+                              <button
+                                onClick={fetchAiRecommendedVideos}
+                                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                              >
+                                다시 시도
+                              </button>
                             </div>
-                          ))}
+                          )}
                         </div>
                       </TabsContent>
                     </div>
@@ -842,6 +866,7 @@ export default function MyProfilePage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
 
   // 데이터 마이그레이션을 위한 useEffect 추가
   useEffect(() => {
@@ -1121,6 +1146,11 @@ ${clusters.map((cluster: any, index: number) => `
     }
   };
 
+  // 이미지 선택 핸들러
+  const handleImageSelect = (image: ImageData) => {
+    setSelectedImage(image);
+  };
+
   return (
     <main className="min-h-screen p-4 relative">
       <div className="relative z-20 w-full">
@@ -1189,6 +1219,7 @@ ${clusters.map((cluster: any, index: number) => `
                   frameStyle={frameStyles[image.id] || 'healing'}
                   onFrameStyleChange={handleFrameStyleChange}
                   onImageChange={handleImageChange}
+                  onImageSelect={handleImageSelect}
                 />
               ))}
             </DndContext>
