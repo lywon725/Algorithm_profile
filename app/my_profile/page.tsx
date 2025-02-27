@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { useRouter } from 'next/navigation';
 import { myProfileImages } from '../data/dummyProfiles';
@@ -93,6 +94,7 @@ type DraggableImageProps = {
   onImageSelect: (image: ImageData) => void;
   isSelected: boolean;
   isSearchMode: boolean;
+  onImageDelete: (id: string) => void;
 };
 
 function DraggableImage({ 
@@ -106,6 +108,7 @@ function DraggableImage({
   onImageSelect,
   isSelected,
   isSearchMode,
+  onImageDelete,
 }: DraggableImageProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: image.id,
@@ -119,6 +122,7 @@ function DraggableImage({
   const [aiRecommendedVideos, setAiRecommendedVideos] = useState<VideoData[]>([]);
   const [isLoadingAiVideos, setIsLoadingAiVideos] = useState(false);
   const router = useRouter();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(${image.rotate}deg)`,
@@ -477,21 +481,75 @@ function DraggableImage({
                     </span>
                   ))}
                 </div>
-                <button 
-                  className="flex items-center justify-center gap-1.5 py-1 px-3 min-w-[100px] bg-white/90 backdrop-blur-sm rounded-full hover:bg-white shadow-sm transition-colors"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowImageModal(true);
-                  }}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span className="text-sm font-medium">이미지 변경</span>
-                </button>
+                {image.desired_self ? (
+                  <>
+                    <button 
+                      className="flex items-center justify-center gap-1.5 py-1 px-3 min-w-[100px] bg-red-500/90 text-white backdrop-blur-sm rounded-full hover:bg-red-600 shadow-sm transition-colors"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowDeleteDialog(true);
+                      }}
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    >
+                      <span className="text-sm font-medium">관심사 삭제하기</span>
+                    </button>
+
+                    <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                      <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                          <DialogTitle className="text-center text-xl font-bold">관심사 삭제</DialogTitle>
+                        </DialogHeader>
+                        <div className="py-6">
+                          <p className="text-center text-gray-700">
+                            정말 이 관심사를 삭제하시겠습니까?
+                          </p>
+                          <p className="text-center text-sm text-gray-500 mt-2">
+                            삭제된 관심사는 히스토리에서 확인할 수 있습니다.
+                          </p>
+                        </div>
+                        <DialogFooter className="flex justify-center gap-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowDeleteDialog(false)}
+                            className="px-8"
+                          >
+                            취소
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => {
+                              onImageDelete(image.id);
+                              setShowDeleteDialog(false);
+                            }}
+                            className="px-8"
+                          >
+                            삭제하기
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </>
+                ) : (
+                  <button 
+                    className="flex items-center justify-center gap-1.5 py-1 px-3 min-w-[100px] bg-white/90 backdrop-blur-sm rounded-full hover:bg-white shadow-sm transition-colors"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowImageModal(true);
+                    }}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span className="text-sm font-medium">이미지 변경</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1289,6 +1347,28 @@ ${clusters.map((cluster: any, index: number) => `
     router.push(`/search?keywords=${encodeURIComponent(keywords)}`);
   };
 
+  const handleImageDelete = (id: string) => {
+    // 이미지 삭제
+    const updatedImages = images.filter(img => img.id !== id);
+    setImages(updatedImages);
+    
+    // 새로운 히스토리 생성 및 저장
+    const newHistory: HistoryData = {
+      timestamp: Date.now(),
+      positions,
+      frameStyles,
+      images: updatedImages
+    };
+    
+    const updatedHistories = [...histories, newHistory];
+    setHistories(updatedHistories);
+    localStorage.setItem('moodboardHistories', JSON.stringify(updatedHistories));
+    setCurrentHistoryIndex(updatedHistories.length - 1);
+    
+    // visibleImageIds 업데이트
+    setVisibleImageIds(new Set(updatedImages.map(img => img.id)));
+  };
+
   return (
     <main className="min-h-screen p-4 relative">
       {/* 검색 모드일 때 배경 그라데이션 추가 */}
@@ -1459,6 +1539,7 @@ ${clusters.map((cluster: any, index: number) => `
                     onImageSelect={handleImageSelect}
                     isSelected={selectedImages.some(img => img.id === image.id)}
                     isSearchMode={isSearchMode}
+                    onImageDelete={handleImageDelete}
                   />
                 </div>
               ))}
