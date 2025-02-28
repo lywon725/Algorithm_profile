@@ -487,3 +487,5 @@ function getClipPath(image: ImageData): string {
     return '';
   }
 } 
+
+//test 입니다
