@@ -5,6 +5,12 @@ import { createClient } from '@supabase/supabase-js';
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import OpenAI from 'openai';
+import { HelpCircle, Upload, ArrowRight, Youtube } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 // 기본 이미지를 데이터 URI로 정의
 const placeholderImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3E%3Crect width='300' height='200' fill='%23cccccc'/%3E%3Ctext x='50%25' y='50%25' font-size='18' text-anchor='middle' alignment-baseline='middle' font-family='Arial, sans-serif' fill='%23666666'%3E이미지를 찾을 수 없습니다%3C/text%3E%3C/svg%3E";
@@ -107,6 +113,7 @@ export default function Home() {
   const [expandedClusters, setExpandedClusters] = useState<Set<number>>(new Set());
   const [activeTab, setActiveTab] = useState<{[key: number]: TabType}>({});
   const [clusterImages, setClusterImages] = useState<Record<number, ClusterImage | null>>({});
+  const [successCount, setSuccessCount] = useState(0);
 
   // useEffect 추가
   useEffect(() => {
@@ -494,7 +501,6 @@ CLUSTER_END`;
             }
           })
         );
-        // 배치 처리 후 API 제한 고려한 딜레이
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
@@ -965,19 +971,26 @@ CLUSTER_END`;
         <div className="absolute top-[20%] right-[20%] w-[60%] h-[60%] rounded-full bg-pink-400/20 blur-[120px] animate-blob animation-delay-4000" />
       </div>
 
-      <div className="flex flex-col items-center space-y-4 text-center relative z-10">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl">
-            Create my own algorithm profile
-          </h1>          
+      <div className="flex flex-col items-center space-y-8 text-center relative z-10">
+        <div className="space-y-6 max-w-8xl mx-auto px-4">
+          <div className="text-center space-y-4">
+            <h1 className="text-5xl sm:text-6xl font-bold">
+              <div className="inline-block">
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600">
+                Are you curious how your algorithm sees you?
+                </span>
+              </div>
+            </h1>
+          </div>
         </div>
-        <div className="w-full max-w-[897px] p-4">
-          {/* 드래그 앤 드롭 영역 */}
+
+        <div className="w-full max-w-[700px] p-8">
           <div
-            className={`mt-4 p-4 border-2 border-dashed rounded-lg transition-all duration-300 ${
+            onClick={() => fileInputRef.current?.click()}
+            className={`w-full cursor-pointer bg-white rounded-2xl p-8 transition-all duration-300 ${
               isDragging 
-                ? 'border-blue-500 bg-blue-50/50' 
-                : 'border-gray-300 hover:border-gray-400'
+                ? 'border-2 border-blue-500 bg-blue-50/50 scale-[1.02] shadow-lg' 
+                : 'border-2 border-gray-200 hover:border-blue-400 shadow-sm hover:shadow-md'
             }`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
@@ -991,40 +1004,87 @@ CLUSTER_END`;
               onChange={handleFileUpload}
               className="hidden"
             />
-            <Button 
-              onClick={() => fileInputRef.current?.click()}
-              variant="outline"
-              className={`w-full py-8 text-lg ${isDragging ? 'bg-blue-50' : ''}`}
-              disabled={isLoading}
-            >
-              {isLoading ? '처리 중...' : (
-                isDragging 
-                  ? '파일을 여기에 놓으세요'
-                  : '시청기록 HTML 파일을 드래그하거나 클릭하여 업로드'
-              )}
-            </Button>
-            <p className="mt-2 text-sm text-gray-500">
-              Google Takeout에서 다운로드한 시청기록.html 파일을 업로드하세요
-            </p>
+            <div className="flex flex-col items-center gap-4">
+              <Upload className="w-12 h-12 text-blue-500" />
+              <div className="text-center">
+                <p className="text-xl font-semibold text-gray-700 mb-2">
+                  {isLoading ? '처리 중...' : (
+                    isDragging 
+                      ? '여기에 파일을 놓아주세요'
+                      : 'Google Takeout에서 다운로드한 Youtube 시청기록 파일을 업로드하세요'
+                  )}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {isLoading ? (
+                    <div className="w-full max-w-md mx-auto">
+                      <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
+                          style={{ 
+                            width: `${(successCount / 30) * 100}%`,
+                            animation: 'progress-animation 1.5s ease-in-out infinite'
+                          }}
+                        />
+                      </div>
+                      <p className="mt-2 text-sm text-gray-600">{successCount}/30개 분석 완료</p>
+                    </div>
+                  ) : (
+                    '파일을 드래그하거나 클릭하여 업로드'
+                  )}
+                </p>
+              </div>
+            </div>
           </div>
 
-          {error && (
-            <div className="mt-2 text-red-500 text-sm">
-              {error}
-            </div>
-          )}
+          <div className="mt-4 flex justify-center">
+            <HoverCard>
+              <HoverCardTrigger>
+                <Button
+                  variant="ghost"
+                  className="text-blue-600 hover:text-blue-700 flex items-center gap-2"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                  <span>Google Takeout 가이드 보기</span>
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent className="w-[600px] p-6 rounded-xl shadow-lg" side="bottom" align="center">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-800 pb-2 border-b">
+                    <Youtube className="w-5 h-5 text-blue-500" />
+                    Google Takeout에서 Youtube 시청기록 내보내기
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="font-medium text-gray-700 mb-2">1. Google Takeout 접속</div>
+                      <a 
+                        href="https://takeout.google.com/" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-sm text-blue-500 hover:underline"
+                      >
+                        takeout.google.com
+                      </a>
+                    </div>
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="font-medium text-gray-700 mb-2">2. YouTube 데이터 선택</div>
+                      <p className="text-sm text-gray-500">다른 항목 모두 해제</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="font-medium text-gray-700 mb-2">3. 시청기록 선택</div>
+                      <p className="text-sm text-gray-500">모든 YouTube 데이터 포함 → 시청기록</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="font-medium text-gray-700 mb-2">4. 내보내기</div>
+                      <p className="text-sm text-gray-500">HTML 형식 선택 후 내보내기</p>
+                    </div>
+                  </div>
+                </div>
+              </HoverCardContent>
+            </HoverCard>
+          </div>
         </div>
-        <div className="flex gap-4 mt-8">
-          <Button 
-            asChild 
-            size="lg" 
-            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:opacity-90 transition-all px-16 py-8 text-2xl font-semibold rounded-full shadow-xl hover:scale-105"
-          >
-            <Link href="/my_profile">
-              Create Profile
-            </Link>
-          </Button>
-        </div>
+
+        
 
         {watchHistory.length > 0 && (
           <div className="mt-8 w-full max-w-[897px] bg-white/90 backdrop-blur-sm rounded-lg p-6 shadow-lg">
@@ -1081,7 +1141,7 @@ CLUSTER_END`;
                       <span key={keyword} className="px-2 py-1 bg-blue-100 rounded-full text-sm">
                         {keyword} ({count})
                       </span>
-                    ))
+                    ))}
                   }
                 </div>
               </div>
@@ -1333,6 +1393,17 @@ CLUSTER_END`;
                     </div>
                   ))}
               </div>
+            </div>
+            <div className="flex gap-4 mt-4">
+              <Button 
+                asChild 
+                size="lg" 
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 transition-all px-16 py-8 text-2xl font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-[1.02] text-white"
+              >
+                <Link href="/my_profile">
+                  Tell me who I am
+                </Link>
+              </Button>
             </div>
           </div>
         )}
