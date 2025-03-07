@@ -31,14 +31,16 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// watchHistory 타입 정의 추가
+// watchHistory 타입 정의 수정
 type WatchHistoryItem = {
   title: string;
   videoId: string;
-  channelName: string;
-  date: Date;
-  url: string;
-  keywords: string[];  // keywords 필드 추가
+  keywords: string[];
+  tags?: string[];
+  timestamp?: string;
+  url?: string;
+  date?: any;  // any 타입으로 변경
+  channelName?: string;  // 옵셔널로 변경
 };
 
 // 클러스터 타입 수정
@@ -100,6 +102,10 @@ type KeywordFrequency = {
 // 네이버 API 설정
 const NAVER_CLIENT_ID = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
 const NAVER_CLIENT_SECRET = process.env.NEXT_PUBLIC_NAVER_CLIENT_SECRET;
+
+type KeywordToVideos = {
+  [key: string]: string[];
+};
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -267,40 +273,47 @@ export default function Home() {
   };
 
   // 통합된 키워드 분석 및 클러스터링 함수
-  const analyzeKeywordsWithOpenAI = async (watchHistory: any[]) => {
+  const analyzeKeywordsWithOpenAI = async (watchHistory: WatchHistoryItem[]) => {
     try {
       // 키워드 출현 빈도 계산
-      const keywordFrequency = watchHistory.flatMap(item => item.keywords)
-        .reduce((acc: KeywordFrequency, keyword: string) => {
-          acc[keyword] = (acc[keyword] || 0) + 1;
-          return acc;
-        }, {});
+      const keywordFrequency: { [key: string]: number } = {};
+      watchHistory.forEach(item => {
+        if (item && Array.isArray(item.keywords)) {
+          item.keywords.forEach((keyword: string) => {
+            keywordFrequency[keyword] = (keywordFrequency[keyword] || 0) + 1;
+          });
+        }
+      });
 
       // 상위 출현 키워드 추출 (10개)
       const topKeywords = Object.entries(keywordFrequency)
-        .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
+        .sort(([, a], [, b]) => b - a)
         .slice(0, 10)
         .map(([keyword, count]) => ({ keyword, count }));
 
       // 키워드와 관련 영상 제목 매핑
-      const keywordToVideos = watchHistory.reduce((acc: {[key: string]: string[]}, video) => {
-        video.keywords.forEach((keyword: string) => {
-          if (!acc[keyword]) {
-            acc[keyword] = [];
-          }
-          acc[keyword].push(video.title);
-        });
-        return acc;
-      }, {});
+      const keywordToVideos: { [key: string]: string[] } = {};
+      watchHistory.forEach(video => {
+        if (video && Array.isArray(video.keywords)) {
+          video.keywords.forEach(keyword => {
+            if (!keywordToVideos[keyword]) {
+              keywordToVideos[keyword] = [];
+            }
+            if (video.title) {
+              keywordToVideos[keyword].push(video.title);
+            }
+          });
+        }
+      });
 
       const prompt = `
 당신은 YouTube 시청 기록을 분석하여 사용자의 취향과 관심사를 깊이 있게 이해하는 전문가입니다.
 다음 시청 기록 데이터를 분석하여 사용자의 관심사와 취향을 가장 잘 나타내는 의미 있는 그룹으로 분류해주세요.
 
 시청 기록 데이터:
-${Object.entries(keywordToVideos).map(([keyword, titles]) => 
-  `${keyword} (${keywordFrequency[keyword]}회):
-   - ${titles.join('\n   - ')}`
+${Object.entries(keywordToVideos as any).map(([keyword, titles]) => 
+  `${keyword}:
+   - ${(titles as string[]).join('\n   - ')}`
 ).join('\n\n')}
 
 가장 자주 등장하는 키워드 (상위 10개):
@@ -435,7 +448,7 @@ CLUSTER_END`;
       
       // 시청기록 데이터 추출
       const watchHistory = watchItems
-        .map(item => {
+        .map((item): any => {  // any 타입으로 변경
           try {
             const titleElement = item.querySelector('a');
             if (!titleElement) return null;
@@ -468,10 +481,7 @@ CLUSTER_END`;
             return null;
           }
         })
-        .filter((item): item is WatchHistoryItem => 
-          item !== null && 
-          Array.isArray(item.keywords)
-        );
+        .filter(item => item !== null);  // 단순화된 필터
 
       if (watchHistory.length === 0) {
         throw new Error('시청기록을 찾을 수 없습니다.');
@@ -963,7 +973,7 @@ CLUSTER_END`;
   }, [clusters]); // clusters가 변경될 때마다 실행
 
   return (
-    <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center p-4 relative overflow-hidden">
+    <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center p-4 py-40 relative overflow-hidden">
       {/* Animated background blobs */}
       <div className="absolute inset-0 overflow-hidden -z-10">
         <div className="absolute -top-[40%] -left-[20%] w-[70%] h-[70%] rounded-full bg-purple-400/30 blur-[120px] animate-blob" />
@@ -987,10 +997,10 @@ CLUSTER_END`;
         <div className="w-full max-w-[700px] p-8">
           <div
             onClick={() => fileInputRef.current?.click()}
-            className={`w-full cursor-pointer bg-white rounded-2xl p-8 transition-all duration-300 ${
+            className={`w-full cursor-pointer backdrop-blur-sm rounded-2xl p-8 transition-all duration-300 ${
               isDragging 
-                ? 'border-2 border-blue-500 bg-blue-50/50 scale-[1.02] shadow-lg' 
-                : 'border-2 border-gray-200 hover:border-blue-400 shadow-sm hover:shadow-md'
+                ? 'border-2 border-blue-500 bg-blue-50/30 scale-[1.02] shadow-lg' 
+                : 'border-2 border-gray-200/60 hover:border-blue-400/60 shadow-sm hover:shadow-md bg-white/70'
             }`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
@@ -1011,9 +1021,14 @@ CLUSTER_END`;
                   {isLoading ? '처리 중...' : (
                     isDragging 
                       ? '여기에 파일을 놓아주세요'
-                      : 'Google Takeout에서 다운로드한 Youtube 시청기록 파일을 업로드하세요'
+                      : 'Google Takeout에서 다운로드한\nYoutube 시청기록 파일을 업로드하세요'
                   )}
                 </p>
+                <style jsx>{`
+                  p {
+                    white-space: pre-line;
+                  }
+                `}</style>
                 <p className="text-sm text-gray-500">
                   {isLoading ? (
                     <div className="w-full max-w-md mx-auto">
@@ -1142,7 +1157,6 @@ CLUSTER_END`;
                         {keyword} ({count})
                       </span>
                     ))}
-                  }
                 </div>
               </div>
             </div>
@@ -1260,10 +1274,6 @@ CLUSTER_END`;
                                   
                                   // 데이터 URI 사용
                                   target.src = placeholderImage;
-                                  
-                                  // 이미지 로드 실패 시 로컬 스토리지에 실패 기록 저장
-                                  const imageAttemptKey = `imageAttempt_${cluster.main_keyword}`;
-                                  localStorage.setItem(imageAttemptKey, 'failed');
                                   
                                   // 이미지 상태 업데이트
                                   setClusterImages(prev => {
@@ -1394,7 +1404,7 @@ CLUSTER_END`;
                   ))}
               </div>
             </div>
-            <div className="flex gap-4 mt-4">
+            <div className="flex justify-center gap-4 mt-8">
               <Button 
                 asChild 
                 size="lg" 

@@ -20,8 +20,8 @@ export function Navbar() {
   const isMainPage = pathname === '/';
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background">
-      <div className="w-full flex h-20 items-center justify-between">
+    <header className="sticky top-0 z-50 w-full">
+      <div className="w-full flex h-20 items-center justify-between backdrop-blur-sm bg-white/10">
         <div className="pl-[20px] flex items-center gap-4">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex items-center gap-3">

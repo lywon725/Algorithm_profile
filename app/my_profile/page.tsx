@@ -47,7 +47,7 @@ type VideoData = {
   embedId: string;
 };
 
-type ImageData = {
+interface ImportedImageData {
   id: string;
   src: string;
   main_keyword: string;
@@ -56,7 +56,6 @@ type ImageData = {
   rotate: number;
   left: string;
   top: string;
-  color: string;
   keywords: string[];
   sizeWeight: number;
   relatedVideos: VideoData[];
@@ -65,8 +64,11 @@ type ImageData = {
   sub_keyword: string;
   description: string;
   desired_self: boolean;
-  desired_self_profile: string;
-};
+  desired_self_profile: string | null;
+  color?: string;
+}
+
+type ImageData = Required<ImportedImageData>;
 
 type HistoryData = {
   timestamp: number;
@@ -123,6 +125,10 @@ function DraggableImage({
   const [isLoadingAiVideos, setIsLoadingAiVideos] = useState(false);
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(${image.rotate}deg)`,
@@ -387,13 +393,26 @@ function DraggableImage({
     
     setIsLoadingAiVideos(true);
     try {
+      const API_KEY = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+      
+      if (!API_KEY) {
+        console.error('YouTube API 키가 설정되지 않았습니다.');
+        throw new Error('API 키가 없습니다.');
+      }
+
       // 주요 키워드와 랜덤 키워드 조합으로 검색
       const randomKeyword = image.keywords[Math.floor(Math.random() * image.keywords.length)];
       const searchQuery = `${image.main_keyword} ${randomKeyword}`;
       
       const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&type=video&maxResults=4&regionCode=KR&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&type=video&maxResults=4&regionCode=KR&key=${API_KEY}`
       );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('YouTube API 오류:', errorData);
+        throw new Error(`YouTube API 오류: ${response.status}`);
+      }
 
       const data = await response.json();
       
@@ -407,6 +426,15 @@ function DraggableImage({
     } catch (error) {
       console.error('AI 추천 비디오 가져오기 오류:', error);
       setAiRecommendedVideos([]);
+      
+      // 에러 발생 시 대체 콘텐츠 표시
+      const fallbackVideos = [
+        {
+          title: '추천 영상을 불러올 수 없습니다.',
+          embedId: ''
+        }
+      ];
+      setAiRecommendedVideos(fallbackVideos);
     } finally {
       setIsLoadingAiVideos(false);
     }
@@ -445,13 +473,46 @@ function DraggableImage({
             touchAction: 'none',
             zIndex: isSelected ? 30 : 10,
           }}
-          className={`${isEditing ? "cursor-move" : "cursor-pointer"} ${
+          className={`${isEditing ? "cursor-move" : isSearchMode ? "cursor-pointer" : ""} ${
             isSelected ? "ring-4 ring-blue-500 ring-opacity-70 shadow-xl scale-105" : ""
           }`}
         >
-          {isEditing && (
-            <div className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group">
-              <div className={`relative w-full h-[calc(100%-40px)] mb-2 ${frameStyle === 'people' ? 'rounded-full' : ''}`}>
+          {/* 메인 키워드 - 편집 모드와 일반 모드 모두에서 표시 */}
+          <div className={`absolute inset-0 transform ${!isEditing && isSearchMode ? 'transition-all duration-300 group hover:scale-110 hover:z-30' : ''}`}
+            onClick={() => !isEditing && isSearchMode && handleImageClick()}
+          >
+            {/* 키워드 */}
+            <div 
+              className="absolute -top-28 left-1/2 transform -translate-x-1/2 z-20 whitespace-nowrap 5"
+              style={{
+                fontSize: `${Math.max(80, 100 * image.sizeWeight)}px`,
+              }}
+            >
+              <div 
+                className="px-8 py-4 "
+                style={{
+                  transform: `scale(${image.sizeWeight})`,
+                  transformOrigin: 'center',
+                }}
+              >
+                <span className="font-bold text-gray-800">
+                  #{image.main_keyword}
+                </span>
+              </div>
+            </div>
+
+            {/* 이미지 */}
+            <SheetTrigger asChild>
+              <div 
+                className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''} ${!isEditing && !isSearchMode ? 'cursor-pointer' : ''}`}
+                onClick={(e) => {
+                  if (isEditing || isSearchMode) {
+                    e.preventDefault();
+                  } else {
+                    setShowDetails(true);
+                  }
+                }}
+              >
                 <div
                   style={{
                     clipPath: getClipPath(),
@@ -461,168 +522,70 @@ function DraggableImage({
                   <img
                     src={image.src}
                     alt={image.main_keyword}
-                    className="w-full h-full object-cover shadow-lg"
+                    className={`w-full h-full object-cover shadow-lg transition-transform duration-300 ${!isEditing && isSearchMode ? 'group-hover:scale-105' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isEditing && isSearchMode) {
+                        handleImageClick();
+                      }
+                    }}
                     onError={(e) => {
                       console.error('이미지 로드 실패:', e);
-                      // 이미지 로드 실패 시 대체 이미지 표시
                       (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
                     }}
                   />
                 </div>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <div className="flex flex-wrap gap-1 justify-center">
+                
+                {/* 키워드를 이미지 하단에 배치 */}
+                <div className="absolute bottom-0.5 left-0 right-0 flex flex-wrap gap-1 justify-center items-center p-2">
                   {image.keywords.map((keyword, idx) => (
                     <span
                       key={idx}
-                      className="inline-block px-2 py-0.5 text-sm font-medium text-gray-700 bg-white/90 backdrop-blur-sm rounded-full shadow-sm"
+                      className="inline-block px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm rounded-full shadow-sm transition-colors"
                     >
                       #{keyword}
                     </span>
                   ))}
                 </div>
-                {image.desired_self ? (
-                  <>
-                    <button 
-                      className="flex items-center justify-center gap-1.5 py-1 px-3 min-w-[100px] bg-red-500/90 text-white backdrop-blur-sm rounded-full hover:bg-red-600 shadow-sm transition-colors"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShowDeleteDialog(true);
-                      }}
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      <span className="text-sm font-medium">관심사 삭제하기</span>
-                    </button>
-
-                    <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                      <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                          <DialogTitle className="text-center text-xl font-bold">관심사 삭제</DialogTitle>
-                        </DialogHeader>
-                        <div className="py-6">
-                          <p className="text-center text-gray-700">
-                            정말 이 관심사를 삭제하시겠습니까?
-                          </p>
-                          <p className="text-center text-sm text-gray-500 mt-2">
-                            삭제된 관심사는 히스토리에서 확인할 수 있습니다.
-                          </p>
-                        </div>
-                        <DialogFooter className="flex justify-center gap-3">
-                          <Button
-                            variant="outline"
-                            onClick={() => setShowDeleteDialog(false)}
-                            className="px-8"
-                          >
-                            취소
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => {
-                              onImageDelete(image.id);
-                              setShowDeleteDialog(false);
-                            }}
-                            className="px-8"
-                          >
-                            삭제하기
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
-                ) : (
-                  <button 
-                    className="flex items-center justify-center gap-1.5 py-1 px-3 min-w-[100px] bg-white/90 backdrop-blur-sm rounded-full hover:bg-white shadow-sm transition-colors"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowImageModal(true);
-                    }}
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span className="text-sm font-medium">이미지 변경</span>
-                  </button>
-                )}
               </div>
-            </div>
-          )}
-          {!isEditing && (
-            <>
-              {isSearchMode ? (
-                // 검색 모드일 때는 모달 없이 이미지만 표시
-                <div 
-                  className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group"
-                  onClick={handleImageClick}
+            </SheetTrigger>
+          </div>
+
+          {isEditing && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              {image.desired_self ? (
+                <button 
+                  className="flex items-center justify-center gap-1.5 py-2 px-4 min-w-[100px] bg-red-500/90 text-white backdrop-blur-sm rounded-full hover:bg-red-600 shadow-sm transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowDeleteDialog(true);
+                  }}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                 >
-                  <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
-                    <div
-                      style={{
-                        clipPath: getClipPath(),
-                      }}
-                      className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
-                    >
-                      <img
-                        src={image.src}
-                        alt={image.main_keyword}
-                        className="w-full h-full object-cover shadow-lg"
-                        onError={(e) => {
-                          console.error('이미지 로드 실패:', e);
-                          (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
-                        }}
-                      />
-                    </div>
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-                      <div className="px-4 py-1.5 bg-white/90 backdrop-blur-sm rounded-full shadow-lg border border-gray-100">
-                        <span className="text-sm font-semibold text-gray-800">
-                          {image.main_keyword}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  <span className="text-sm font-medium">관심사 삭제하기</span>
+                </button>
               ) : (
-                // 일반 모드일 때는 모달 표시
-                <SheetTrigger asChild>
-                  <div 
-                    className="absolute inset-0 transform transition-all duration-300 hover:scale-110 hover:z-30 group"
-                    onClick={handleImageClick}
-                  >
-                    <div className={`relative w-full h-[calc(100%-40px)] ${frameStyle === 'people' ? 'rounded-full overflow-hidden' : ''}`}>
-                      <div
-                        style={{
-                          clipPath: getClipPath(),
-                        }}
-                        className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
-                      >
-                        <img
-                          src={image.src}
-                          alt={image.main_keyword}
-                          className="w-full h-full object-cover shadow-lg"
-                          onError={(e) => {
-                            console.error('이미지 로드 실패:', e);
-                            (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
-                          }}
-                        />
-                      </div>
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-                        <div className="px-4 py-1.5 bg-white/90 backdrop-blur-sm rounded-full shadow-lg border border-gray-100">
-                          <span className="text-sm font-semibold text-gray-800">
-                            {image.main_keyword}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </SheetTrigger>
+                <button 
+                  className="flex items-center justify-center gap-1.5 py-2 px-4 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white shadow-lg transition-all hover:scale-105 z-20"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowImageModal(true);
+                  }}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span className="text-sm font-medium">이미지 변경</span>
+                </button>
               )}
-            </>
+            </div>
           )}
           {isEditing && (
             <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-white rounded-full shadow-lg px-3 py-1 z-40">
@@ -656,12 +619,98 @@ function DraggableImage({
             />
           )}
         </div>
+
+      </Sheet>
+
+      {showImageModal && (
+        <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
+          <DialogContent className="max-w-[80vw] w-[80vw] min-w-[80vw] max-h-[80vh] h-[80vh] min-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>이미지 변경</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-12 gap-6 h-[calc(100%-60px)]">
+              {/* 기존 이미지 (좌측) - 50% 크기로 조정 */}
+              <div className="col-span-6 flex items-center justify-center">
+                <div className="w-[80%] aspect-square relative rounded-lg overflow-hidden border-2 border-blue-500 shadow-lg">
+                  <img
+                    src={image.src}
+                    alt={image.main_keyword}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+
+              {/* 새 이미지 선택 옵션 (우측) - 50% 영역에 4개 이미지 배치 */}
+              <div className="col-span-6 space-y-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-base font-medium text-gray-700">새 이미지 선택</p>
+                  <button
+                    onClick={() => fetchAlternativeImages()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    새로 검색
+                  </button>
+                </div>
+                {isLoadingImages ? (
+                  <div className="grid grid-cols-2 gap-4 p-4">
+                    {[1, 2, 3, 4].map((_, index) => (
+                      <div key={index} className="aspect-square bg-gray-100 animate-pulse rounded-lg" />
+                    ))}
+                  </div>
+                ) : alternativeImages && alternativeImages.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4 p-4">
+                    {alternativeImages.map((altImage) => (
+                      <div 
+                        key={altImage.id}
+                        className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-colors cursor-pointer group shadow-md"
+                        onClick={() => handleImageSelect(altImage)}
+                      >
+                        <img
+                          src={altImage.urls.regular}
+                          alt={altImage.alt_description || '대체 이미지'}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full font-medium hover:bg-white transition-colors">
+                            선택하기
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-gray-500">검색된 이미지가 없습니다.</div>
+                  </div>
+                )}
+                <div className="bg-blue-50 rounded-lg p-4 mt-4">
+                  <div className="text-sm text-blue-600">
+                    * 현재 키워드 ({image.keywords.join(', ')})에 맞는 이미지를 보여드립니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 드래그 가능한 상세 정보 패널 */}
+      <Sheet open={showDetails} onOpenChange={setShowDetails}>
         <SheetContent 
-          side="bottom" 
-          className="h-[80vh] sm:h-[85vh]"
+          side="right" 
+          style={{
+            width: '50vw',
+            maxWidth: '60vw',
+            height: '100vh'
+          }}
+          className="overflow-y-auto p-0"
         >
+          <div className="flex items-center justify-between p-4 border-b">
+          </div>
+
           <div className="h-full overflow-y-auto px-4">
-            <div className="flex flex-col max-w-3xl mx-auto pb-8">
+            <div className="flex flex-col w-full max-w-[85vw] mx-auto pb-8">
               <div className="relative w-full h-[400px] flex-shrink-0">
                 <img
                   src={image.src}
@@ -702,7 +751,7 @@ function DraggableImage({
                       "bg-blue-100 text-blue-700"
                     }`}>
                       {image.sizeWeight >= 1.2 ? "강" :
-                       image.sizeWeight >= 0.8 ? "중" : "약"}
+                      image.sizeWeight >= 0.8 ? "중" : "약"}
                     </span>
                   </div>
                   
@@ -719,8 +768,8 @@ function DraggableImage({
 
                   <p className="mt-3 text-sm text-gray-600">
                     {image.sizeWeight >= 1.2 ? "이 주제에 대한 높은 관심도를 보입니다" :
-                     image.sizeWeight >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
-                     "이 주제에 대해 가볍게 관심을 두고 있습니다"}
+                    image.sizeWeight >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
+                    "이 주제에 대해 가볍게 관심을 두고 있습니다"}
                   </p>
                 </div>
 
@@ -906,79 +955,6 @@ function DraggableImage({
           </div>
         </SheetContent>
       </Sheet>
-
-      {showImageModal && (
-        <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
-          <DialogContent className="max-w-[80vw] w-[80vw] min-w-[80vw] max-h-[80vh] h-[80vh] min-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>이미지 변경</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-12 gap-6 h-[calc(100%-60px)]">
-              {/* 기존 이미지 (좌측) - 50% 크기로 조정 */}
-              <div className="col-span-6 flex items-center justify-center">
-                <div className="w-[80%] aspect-square relative rounded-lg overflow-hidden border-2 border-blue-500 shadow-lg">
-                  <img
-                    src={image.src}
-                    alt={image.main_keyword}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-
-              {/* 새 이미지 선택 옵션 (우측) - 50% 영역에 4개 이미지 배치 */}
-              <div className="col-span-6 space-y-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-base font-medium text-gray-700">새 이미지 선택</p>
-                  <button
-                    onClick={() => fetchAlternativeImages()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    새로 검색
-                  </button>
-                </div>
-                {isLoadingImages ? (
-                  <div className="grid grid-cols-2 gap-4 p-4">
-                    {[1, 2, 3, 4].map((_, index) => (
-                      <div key={index} className="aspect-square bg-gray-100 animate-pulse rounded-lg" />
-                    ))}
-                  </div>
-                ) : alternativeImages && alternativeImages.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-4 p-4">
-                    {alternativeImages.map((altImage) => (
-                      <div 
-                        key={altImage.id}
-                        className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-colors cursor-pointer group shadow-md"
-                        onClick={() => handleImageSelect(altImage)}
-                      >
-                        <img
-                          src={altImage.urls.regular}
-                          alt={altImage.alt_description || '대체 이미지'}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <button className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full font-medium hover:bg-white transition-colors">
-                            선택하기
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-gray-500">검색된 이미지가 없습니다.</p>
-                  </div>
-                )}
-                <div className="bg-blue-50 rounded-lg p-4 mt-4">
-                  <p className="text-sm text-blue-600">
-                    * 현재 키워드 ({image.keywords.join(', ')})에 맞는 이미지를 보여드립니다.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   );
 }
@@ -998,7 +974,13 @@ export default function MyProfilePage() {
   const [histories, setHistories] = useState<HistoryData[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [images, setImages] = useState<ImageData[]>(myProfileImages);
+  const [images, setImages] = useState<ImageData[]>(() => {
+    return (myProfileImages as ImportedImageData[]).map(img => ({
+      ...img,
+      color: img.color || 'gray',
+      desired_self_profile: img.desired_self_profile || null
+    }));
+  });
   const [visibleImageIds, setVisibleImageIds] = useState<Set<string>>(new Set());
 
   const [profile, setProfile] = useState({
@@ -1011,6 +993,40 @@ export default function MyProfilePage() {
   const [selectedImages, setSelectedImages] = useState<ImageData[]>([]);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const router = useRouter();
+  const [showGeneratingDialog, setShowGeneratingDialog] = useState(false);
+  const [generatingStep, setGeneratingStep] = useState(0);
+  const generatingSteps = [
+    "당신의 시청 기록을 분석하고 있습니다...",
+    "알고리즘이 당신의 취향을 이해하고 있습니다...",
+    "흥미로운 패턴을 발견했습니다!",
+    "당신만의 특별한 별명을 생성중입니다..."
+  ];
+
+  const [bgColor, setBgColor] = useState('bg-white');
+
+  const colorOptions = [
+    { name: '화이트', class: 'bg-white' },
+    { name: '크림', class: 'bg-amber-50' },
+    { name: '라벤더', class: 'bg-purple-50' },
+    { name: '민트', class: 'bg-emerald-50' },
+    { name: '피치', class: 'bg-rose-50' },
+    { name: '스카이', class: 'bg-sky-50' },
+  ];
+
+  // 배경색 저장 및 불러오기
+  useEffect(() => {
+    // 저장된 배경색 불러오기
+    const savedBgColor = localStorage.getItem('moodboard-bg-color');
+    if (savedBgColor) {
+      setBgColor(savedBgColor);
+    }
+  }, []);
+
+  // 배경색 변경 핸들러
+  const handleBgColorChange = (colorClass: string) => {
+    setBgColor(colorClass);
+    localStorage.setItem('moodboard-bg-color', colorClass);
+  };
 
   // 데이터 마이그레이션을 위한 useEffect 추가
   useEffect(() => {
@@ -1102,7 +1118,7 @@ export default function MyProfilePage() {
         if (latestHistory.images && latestHistory.images.length > 0) {
           setImages(latestHistory.images);
           // 최신 히스토리의 모든 이미지 ID를 visibleImageIds에 추가
-          setVisibleImageIds(new Set(latestHistory.images.map(img => img.id)));
+          setVisibleImageIds(new Set(latestHistory.images.map((img: ImageData) => img.id)));
         }
       }
       // 마이그레이션된 데이터 저장
@@ -1241,29 +1257,36 @@ export default function MyProfilePage() {
   };
 
   // 프로필 생성 함수를 별도로 분리
-  const generateUserProfile = async () => {
+  const generateUserProfile = useCallback(async () => {
     try {
       setIsGeneratingProfile(true);
+      setShowGeneratingDialog(true);
       
-      // 로컬 스토리지에서 클러스터 정보 가져오기
+      // 각 단계별로 딜레이를 주며 진행
+      for (let i = 0; i < generatingSteps.length; i++) {
+        setGeneratingStep(i);
+        await new Promise(resolve => setTimeout(resolve, 1500)); // 각 단계별 1.5초 딜레이
+      }
+
       const clusters = JSON.parse(localStorage.getItem('watchClusters') || '[]');
+      console.log('클러스터 데이터:', clusters); // 디버깅용 로그
       
-      if (clusters.length === 0) {
-        setProfile({
+      if (!clusters || clusters.length === 0) {
+        const defaultProfile = {
           nickname: '알고리즘 탐험가',
           description: '아직 충분한 시청 기록이 없습니다. 더 많은 영상을 시청하고 분석해보세요!'
-        });
+        };
+        setProfile(defaultProfile);
         return;
       }
-      
-      // 클러스터 정보를 기반으로 프로필 생성
+
       const prompt = `
 당신은 사용자의 YouTube 시청 패턴을 분석하여 그들의 성격과 취향을 파악하는 전문가입니다.
 다음은 사용자의 YouTube 시청 기록을 분석한 클러스터 정보입니다:
 
 ${clusters.map((cluster: any, index: number) => `
 클러스터 ${index + 1}:
-- 주요 키워드: ${cluster.main_keyword}
+- 주요 키워드: ${cluster.main_keyword || '정보 없음'}
 - 카테고리: ${cluster.category || '미분류'}
 - 설명: ${cluster.description || '정보 없음'}
 - 감성 키워드: ${cluster.mood_keyword || '정보 없음'}
@@ -1281,24 +1304,32 @@ ${clusters.map((cluster: any, index: number) => `
 설명: [생성된 설명]
 `;
 
+      console.log('OpenAI 요청 시작'); // 디버깅용 로그
       const completion = await openai.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
-        temperature: 0.8,
+        temperature: 0.9,
       });
 
       const response = completion.choices[0].message.content || '';
+      console.log('OpenAI 응답:', response);
       
-      // 응답 파싱
-      const nicknameMatch = response.match(/별명: (.*)/);
-      const descriptionMatch = response.match(/설명: (.*)/s);
+      // 응답 파싱 개선
+      const nicknameMatch = response.match(/별명:\s*(.*?)(?=\n|$)/);
+      const descriptionMatch = response.match(/설명:\s*([\s\S]*?)(?=\n\n|$)/);
       
-      setProfile({
+      const newProfile = {
         nickname: nicknameMatch ? nicknameMatch[1].trim() : '알고리즘 탐험가',
         description: descriptionMatch 
           ? descriptionMatch[1].trim() 
           : '당신만의 독특한 콘텐츠 취향을 가지고 있습니다. 더 많은 영상을 시청하고 분석해보세요!'
-      });
+      };
+
+      console.log('새로운 프로필:', newProfile);
+      
+      // 상태 업데이트
+      setProfile(newProfile);
+      
     } catch (error) {
       console.error('프로필 생성 오류:', error);
       setProfile({
@@ -1306,9 +1337,12 @@ ${clusters.map((cluster: any, index: number) => `
         description: '프로필 생성 중 오류가 발생했습니다. 나중에 다시 시도해주세요.'
       });
     } finally {
+      await new Promise(resolve => setTimeout(resolve, 1000));
       setIsGeneratingProfile(false);
+      setShowGeneratingDialog(false);
+      setGeneratingStep(0);
     }
-  };
+  }, []); // 의존성 배열 비움
 
   // 이미지 선택 핸들러
   const handleImageSelect = (image: ImageData) => {
@@ -1369,8 +1403,51 @@ ${clusters.map((cluster: any, index: number) => `
     setVisibleImageIds(new Set(updatedImages.map(img => img.id)));
   };
 
+  // 컴포넌트 시작 부분에 useEffect 추가
+  useEffect(() => {
+    // 페이지 로드 시 자동으로 별명 생성
+    generateUserProfile();
+  }, []); // 빈 의존성 배열로 컴포넌트 마운트 시 한 번만 실행
+
   return (
-    <main className="min-h-screen p-4 relative">
+    <main className={`min-h-screen p-4 relative transition-colors duration-500 ${bgColor}`}>
+      {/* 생성 중 다이얼로그 */}
+      <Dialog open={showGeneratingDialog} onOpenChange={setShowGeneratingDialog}>
+        <DialogContent className="sm:max-w-[500px] bg-black/95 border-none text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white text-center">알고리즘 프로필 생성</DialogTitle>
+          </DialogHeader>
+          <div className="py-10 px-4">
+            <div className="flex flex-col items-center space-y-6">
+              {/* 로딩 애니메이션 */}
+              <div className="relative w-24 h-24">
+                <div className="absolute inset-0 rounded-full border-4 border-blue-500/30 animate-pulse"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin"></div>
+                <div className="absolute inset-2 rounded-full border-4 border-transparent border-t-purple-500 animate-spin-slow"></div>
+                <div className="absolute inset-4 rounded-full border-4 border-transparent border-t-pink-500 animate-spin-slower"></div>
+              </div>
+              
+              {/* 현재 단계 메시지 */}
+              <div className="text-center space-y-2">
+                <p className="text-xl font-semibold animate-pulse">
+                  {generatingSteps[generatingStep]}
+                </p>
+                <div className="flex justify-center gap-2 mt-4">
+                  {generatingSteps.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        index === generatingStep ? 'bg-blue-500 scale-125' : 'bg-gray-600'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* 검색 모드일 때 배경 그라데이션 추가 */}
       {isSearchMode && (
         <div className="fixed inset-0 z-10 bg-gradient-to-br from-emerald-900 via-black-900 to-white-800 animate-gradient-x">
@@ -1408,9 +1485,9 @@ ${clusters.map((cluster: any, index: number) => `
           <h1 className="text-4xl font-bold text-white drop-shadow-lg">
             Explore someone's interest based on your interest
           </h1>
-          <p className="mt-4 text-white/80 text-lg max-w-2xl mx-auto">
+          <div className="mt-4 text-white/80 text-lg max-w-2xl mx-auto">
             Discover profiles that match your unique algorithm preferences
-          </p>
+          </div>
           
           {/* 선택된 이미지들의 키워드 컨테이너 - 항상 존재하지만 내용물이 변함 */}
           <div className="mt-16 flex flex-col items-center gap-6 min-h-[200px] transition-all duration-500">
@@ -1470,9 +1547,9 @@ ${clusters.map((cluster: any, index: number) => `
                   {profile.nickname ? `${profile.nickname}의 무드보드` : 'My 무드보드'}
                 </h1>
               </div>
-              <p className="text-gray-500 text-lg leading-relaxed mt-4">
+              <div className="text-gray-500 text-lg leading-relaxed mt-4">
                 {profile.description || '나만의 알고리즘 프로필을 생성해보세요.'}
-              </p>
+              </div>
               <div className="flex gap-4">
                 <Button
                   variant="outline"
@@ -1638,6 +1715,35 @@ ${clusters.map((cluster: any, index: number) => `
           )}
         </div>
       </div>
+
+      {/* 컬러 팔레트 보드 (편집 모드일 때만 표시) */}
+      {isEditing && !isSearchMode && (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 w-auto bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 z-50">
+          <div className="flex flex-col items-center gap-4">
+            <h3 className="text-lg font-semibold text-gray-800">배경 색상 설정</h3>
+            <div className="flex items-center gap-3">
+              {colorOptions.map((color) => (
+                <button
+                  key={color.class}
+                  onClick={() => handleBgColorChange(color.class)}
+                  className={`
+                    w-12 h-12 rounded-xl ${color.class} transition-all duration-300
+                    hover:scale-110 shadow-md hover:shadow-lg
+                    ${bgColor === color.class ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
+                    relative group
+                  `}
+                >
+                  <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 
+                    bg-gray-900 text-white text-xs py-1 px-2 rounded opacity-0 
+                    group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    {color.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 } 
