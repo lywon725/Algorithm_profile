@@ -77,13 +77,13 @@ export const myProfileImages: ImageData[] = [
     mood_keyword: "다정함",
     description: "따뜻한 미소와 친근한 매력의 아이돌",
     category: "music",
-    width: 250,
-    height: 250,
+    width: 100,
+    height: 100,
     rotate: 3,
     left: "50%",
     top: "0%",
     keywords: ["채령", "다정함", "사랑스러운"],
-    sizeWeight: 0.5,
+    sizeWeight: 0.3,
     relatedVideos: [
       {
         title: " 남녀 사이에 친구가 있다고 믿는 아이돌 TOP4",
@@ -119,8 +119,9 @@ export const myProfileImages: ImageData[] = [
     mood_keyword: "유쾌함",
     description: "웃음이 가득한 즐거운 순간들",
     category: "art",
-    width: 280,
-    height: 200,
+
+    width: 200,
+    height: 180,
     rotate: -12,
     left: "20%",
     top: "45%",

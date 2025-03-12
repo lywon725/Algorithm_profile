@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { useRouter } from 'next/navigation';
 import { myProfileImages } from '../data/dummyProfiles';
+import { ImageData } from '@/types/profile';
 
 // OpenAI 클라이언트 초기화
 const openai = new OpenAI({
@@ -520,18 +521,20 @@ function DraggableImage({
                   className={`relative w-full h-full ${getFrameStyle()} overflow-hidden`}
                 >
                   <img
-                    src={image.src}
+                    src={image.src || '/images/placeholder.jpg'}
                     alt={image.main_keyword}
                     className={`w-full h-full object-cover shadow-lg transition-transform duration-300 ${!isEditing && isSearchMode ? 'group-hover:scale-105' : ''}`}
                     onClick={(e) => {
+                      console.log('이미지 정보:', image);
                       e.stopPropagation();
                       if (!isEditing && isSearchMode) {
                         handleImageClick();
                       }
                     }}
                     onError={(e) => {
-                      console.error('이미지 로드 실패:', e);
-                      (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+                      const target = e.target as HTMLImageElement;
+                      console.error('이미지 로드 실패:', target.src);
+                      target.src = '/images/placeholder.jpg';
                     }}
                   />
                 </div>
@@ -974,12 +977,26 @@ export default function MyProfilePage() {
   const [histories, setHistories] = useState<HistoryData[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
+  const placeholderImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3E%3Crect width='300' height='200' fill='%23cccccc'/%3E%3Ctext x='50%25' y='50%25' font-size='18' text-anchor='middle' alignment-baseline='middle' font-family='Arial, sans-serif' fill='%23666666'%3E이미지를 찾을 수 없습니다%3C/text%3E%3C/svg%3E";
+
   const [images, setImages] = useState<ImageData[]>(() => {
-    return (myProfileImages as ImportedImageData[]).map(img => ({
-      ...img,
-      color: img.color || 'gray',
-      desired_self_profile: img.desired_self_profile || null
-    }));
+    // localStorage에서 profileImages 불러오기
+    if (typeof window !== 'undefined') {
+      const savedProfileImages = localStorage.getItem('profileImages');
+      if (savedProfileImages) {
+        console.log('로드된 프로필 이미지:', savedProfileImages); // 디버깅용 로그
+        const parsedImages = JSON.parse(savedProfileImages) as ImportedImageData[];
+        return parsedImages.map(img => ({
+          ...img,
+          src: img.src || placeholderImage,
+          color: img.color || 'gray',
+          desired_self_profile: img.desired_self_profile || null
+        }));
+      }
+    }
+    // 저장된 데이터가 없을 경우 빈 배열 반환
+    console.log('프로필 이미지를 찾을 수 없습니다.'); // 디버깅용 로그
+    return [];
   });
   const [visibleImageIds, setVisibleImageIds] = useState<Set<string>>(new Set());
 

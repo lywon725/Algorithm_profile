@@ -11,6 +11,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { transformClusterToImageData } from './utils/clusterTransform';
 
 // 기본 이미지를 데이터 URI로 정의
 const placeholderImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3E%3Crect width='300' height='200' fill='%23cccccc'/%3E%3Ctext x='50%25' y='50%25' font-size='18' text-anchor='middle' alignment-baseline='middle' font-family='Arial, sans-serif' fill='%23666666'%3E이미지를 찾을 수 없습니다%3C/text%3E%3C/svg%3E";
@@ -64,17 +65,20 @@ type Category =
 type Cluster = {
   id?: number;
   user_id?: string;
+
   main_keyword: string;
   sub_keyword: string;
   mood_keyword: string;
   description: string;
   category: Category;  // 카테고리 필드 추가
+  
   rotation?: string;
   keyword_list: string;
   strength: number;
   video_links: string;
   created_at: string;
   desired_self: boolean;
+
   main_image_url?: string;
   metadata: any;
 };
@@ -125,6 +129,11 @@ export default function Home() {
     date: string;
     clusters: any[];
   }[]>([]);
+  const [showVisionResults, setShowVisionResults] = useState(false);
+  const [visionSearchResults, setVisionSearchResults] = useState({
+    similarImages: [],
+    labels: [],
+  });
 
   // useEffect 추가
   useEffect(() => {
@@ -579,6 +588,23 @@ CLUSTER_END`;
       
       // 현재 클러스터 설정
       setClusters(newClusters);
+
+      // 클러스터 이미지 가져오기
+      const clusterImagesData: Record<number, any> = {};
+      for (let i = 0; i < newClusters.length; i++) {
+        const image = await searchClusterImage(newClusters[i], true);
+        clusterImagesData[i] = image;
+      }
+
+      // ImageData 형식으로 변환
+      const profileImages = newClusters.map((cluster: any, index: number) => {
+        const imageUrl = clusterImagesData[index]?.url || placeholderImage;
+        return transformClusterToImageData(cluster, index, imageUrl);
+      });
+
+      // 프로필 이미지 데이터 저장
+      localStorage.setItem('profileImages', JSON.stringify(profileImages));
+      
       setShowAnalysis(true);
     } catch (error) {
       console.error('클러스터링 실패:', error);
@@ -985,8 +1011,6 @@ CLUSTER_END`;
         // 성공 기록 저장
         localStorage.setItem(imageAttemptKey, 'success');
         console.log('💾 이미지 저장 완료');
-        console.groupEnd();
-
         return image;
       } catch (error) {
         console.error('❌ 모든 검색 시도 실패:', error);
@@ -1084,10 +1108,10 @@ CLUSTER_END`;
         <div className="absolute top-[20%] right-[20%] w-[60%] h-[60%] rounded-full bg-pink-400/20 blur-[120px] animate-blob animation-delay-4000" />
       </div>
 
-      <div className="flex flex-col items-center space-y-8 text-center relative z-10">
-        <div className="space-y-6 max-w-8xl mx-auto px-4">
+      <div className="flex flex-col items-center space-y-8 text-center relative z-10 ">
+        <div className="space-y-7 max-w-8xl mx-auto px-4">
           <div className="text-center space-y-4">
-            <h1 className="text-5xl sm:text-6xl font-bold">
+            <h1 className="text-4xl sm:text-5xl font-bold px-4 sm:px-14">
               <div className="inline-block">
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600">
                 Are you curious how your algorithm sees you?
@@ -1348,6 +1372,16 @@ CLUSTER_END`;
                                   try {
                                     console.log('이미지 검색 시작:', cluster.main_keyword);
                                     
+                                    // 캐시 초기화: localStorage에서 해당 키워드의 이미지 검색 시도 기록 삭제
+                                    const imageAttemptKey = `imageAttempt_${cluster.main_keyword}`;
+                                    localStorage.removeItem(imageAttemptKey);
+                                    
+                                    // 기존 저장된 이미지 삭제
+                                    const savedImages = JSON.parse(localStorage.getItem('clusterImages') || '{}');
+                                    delete savedImages[cluster.main_keyword];
+                                    localStorage.setItem('clusterImages', JSON.stringify(savedImages));
+                                    
+                                    // 새로운 이미지 검색
                                     const image = await searchClusterImage(cluster, true);
                                     console.log('검색된 이미지:', image);
 
@@ -1379,117 +1413,110 @@ CLUSTER_END`;
 
                           {/* 클러스터 대표 이미지 */}
                           {clusterImages[index] && (
-                            <div className="relative w-full h-64 mb-4 rounded-lg overflow-hidden">
-                              <img
-                                src={clusterImages[index]?.url || placeholderImage}
-                                alt={cluster.main_keyword}
-                                className="w-full h-full object-contain bg-gray-100"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  console.error('이미지 로드 실패:', target.src);
-                                  
-                                  // 이미지 URL이 이미 placeholderImage인 경우 재시도하지 않음
-                                  if (target.src === placeholderImage) {
-                                    return;
-                                  }
-                                  
-                                  // placeholderImage로 대체
-                                  target.src = placeholderImage;
-                                  
-                                  // 클러스터 이미지 상태 업데이트
-                                  setClusterImages(prev => {
-                                    const newImages = { ...prev };
-                                    newImages[index] = {
-                                      url: placeholderImage,
-                                      credit: {
-                                        name: 'Default Image',
-                                        link: '#'
+                            <div className="space-y-4">
+                              <div className="relative w-full h-64 mb-4 rounded-lg overflow-hidden">
+                                <img
+                                  src={clusterImages[index]?.url || placeholderImage}
+                                  alt={cluster.main_keyword}
+                                  className="w-full h-full object-contain bg-gray-100"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    console.error('이미지 로드 실패:', target.src);
+                                    
+                                    if (target.src === placeholderImage) {
+                                      return;
+                                    }
+                                    
+                                    target.src = placeholderImage;
+                                    
+                                    setClusterImages(prev => {
+                                      const newImages = { ...prev };
+                                      newImages[index] = {
+                                        url: placeholderImage,
+                                        credit: {
+                                          name: 'Default Image',
+                                          link: '#'
+                                        }
+                                      };
+                                      return newImages;
+                                    });
+                                  }}
+                                />
+                                <div className="absolute bottom-0 right-0 p-2 text-xs text-white bg-black bg-opacity-50">
+                                  출처: {clusterImages[index]?.credit?.name || 'Default'}
+                                </div>
+                              </div>
+                              
+                              {/* 핀터레스트 검색 버튼 추가 */}
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  onClick={() => {
+                                    const imageUrl = clusterImages[index]?.url;
+                                    if (imageUrl && imageUrl !== placeholderImage) {
+                                      // 일반 검색
+                                      window.open(`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(cluster.main_keyword)}`, '_blank');
+                                    }
+                                  }}
+                                  variant="outline"
+                                  className="flex items-center gap-2 hover:bg-red-50 text-red-500"
+                                >
+                                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 0a12 12 0 0 0-4.37 23.17c-.1-.94-.2-2.43.04-3.47.22-.97 1.4-6.16 1.4-6.16s-.36-.72-.36-1.78c0-1.67.97-2.92 2.17-2.92 1.02 0 1.51.77 1.51 1.68 0 1.03-.65 2.56-.99 3.98-.28 1.19.6 2.16 1.77 2.16 2.12 0 3.76-2.24 3.76-5.47 0-2.86-2.06-4.86-5-4.86-3.4 0-5.39 2.55-5.39 5.18 0 1.02.39 2.12.89 2.71.1.12.11.22.08.34l-.33 1.37c-.05.22-.17.27-.4.16-1.5-.7-2.43-2.89-2.43-4.65 0-3.77 2.74-7.25 7.9-7.25 4.14 0 7.36 2.95 7.36 6.9 0 4.12-2.6 7.43-6.2 7.43-1.21 0-2.35-.63-2.74-1.37l-.75 2.85c-.27 1.04-1 2.35-1.49 3.15A12 12 0 1 0 12 0z"/>
+                                  </svg>
+                                  키워드 검색
+                                </Button>
+                                
+                                <Button
+                                  onClick={async () => {
+                                    const imageUrl = clusterImages[index]?.url;
+                                    if (imageUrl && imageUrl !== placeholderImage) {
+                                      try {
+                                        // 로딩 상태 표시
+                                        setIsLoading(true);
+
+                                        // Google Vision API 호출
+                                        const response = await fetch('/api/google-vision-search', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                          },
+                                          body: JSON.stringify({ imageUrl }),
+                                        });
+
+                                        if (!response.ok) {
+                                          throw new Error('API 호출 실패');
+                                        }
+
+                                        const data = await response.json();
+
+                                        // 결과 모달 표시
+                                        setVisionSearchResults({
+                                          similarImages: data.similarImages,
+                                          labels: data.labels,
+                                        });
+                                        setShowVisionResults(true);
+                                      } catch (error) {
+                                        console.error('Vision 검색 실패:', error);
+                                        alert('이미지 검색 중 오류가 발생했습니다.');
+                                      } finally {
+                                        setIsLoading(false);
                                       }
-                                    };
-                                    return newImages;
-                                  });
-                                }}
-                              />
-                              <div className="absolute bottom-0 right-0 p-2 text-xs text-white bg-black bg-opacity-50">
-                                출처: {clusterImages[index]?.credit?.name || 'Default'}
+                                    } else {
+                                      alert('유효한 이미지가 없습니다.');
+                                    }
+                                  }}
+                                  variant="outline"
+                                  className="flex items-center gap-2 hover:bg-purple-50 text-purple-500"
+                                  disabled={isLoading}
+                                >
+                                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  {isLoading ? '검색 중...' : 'Vision 검색'}
+                                </Button>
                               </div>
                             </div>
                           )}
-
-                          <div className="space-y-4">
-                            <div className="bg-white rounded-lg p-4">
-                              <div className="flex items-center gap-2 mb-3">
-                                <span className="font-semibold text-gray-700">카테고리:</span>
-                                <span className="px-2.5 py-1 bg-blue-100 rounded-full text-sm font-medium text-blue-700">
-                                  {cluster.category}
-                                </span>
-                              </div>
-                              <p className="text-gray-700">{cluster.description}</p>
-                            </div>
-
-                            <div className="bg-white rounded-lg p-4">
-                              <h5 className="font-semibold mb-3 text-gray-700">주요 키워드</h5>
-                              <div className="flex flex-wrap gap-2">
-                                {cluster.keyword_list.split(',').map((keyword: string, idx: number) => (
-                                  <span key={idx} className="px-3 py-1.5 bg-gray-100 rounded-full text-sm">
-                                    {keyword.trim()}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {cluster.mood_keyword && (
-                              <div className="bg-white rounded-lg p-4">
-                                <h5 className="font-semibold mb-3 text-gray-700">감성 & 분위기</h5>
-                                <div className="flex flex-wrap gap-2">
-                                  {cluster.mood_keyword.split(',').map((keyword: string, idx: number) => (
-                                    <span key={idx} className="px-3 py-1.5 bg-purple-100 rounded-full text-sm font-medium text-purple-700">
-                                      {keyword.trim()}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* 탭 버튼 */}
-                            <div className="flex gap-2 border-b border-gray-200">
-                              <button
-                                className={`px-4 py-2 ${
-                                  activeTab[index] === 'related' 
-                                    ? 'border-b-2 border-blue-500 text-blue-600' 
-                                    : 'text-gray-500'
-                                }`}
-                                onClick={() => setActiveTab({...activeTab, [index]: 'related'})}
-                              >
-                                관련 영상 ({cluster.related_videos.length})
-                              </button>
-                              <button
-                                className={`px-4 py-2 ${
-                                  activeTab[index] === 'recommended' 
-                                    ? 'border-b-2 border-blue-500 text-blue-600' 
-                                    : 'text-gray-500'
-                                }`}
-                                onClick={() => setActiveTab({...activeTab, [index]: 'recommended'})}
-                              >
-                                추천 영상
-                              </button>
-                            </div>
-
-                            {/* 영상 목록 */}
-                            <div className="bg-white rounded-lg p-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {activeTab[index] === 'related' ? (
-                                  // 관련 영상 목록
-                                  cluster.related_videos.map((video: any, idx: number) => (
-                                    <VideoCard key={idx} video={video} />
-                                  ))
-                                ) : (
-                                  // 추천 영상 목록
-                                  <RecommendedVideos cluster={cluster} />
-                                )}
-                              </div>
-                            </div>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -1527,6 +1554,23 @@ CLUSTER_END`;
             </div>
             <div className="flex justify-center gap-4 mt-8">
               <Button 
+                onClick={() => {
+                  // 가장 최신 분석 결과 가져오기
+                  const savedAnalyses = JSON.parse(localStorage.getItem('analysisHistory') || '[]');
+                  if (savedAnalyses.length > 0) {
+                    const latestAnalysis = savedAnalyses[savedAnalyses.length - 1];
+                    // 최신 분석 결과를 profileImages로 변환
+                    const profileImages = latestAnalysis.clusters.map((cluster: any, index: number) => {
+                      // clusterImages가 없거나 해당 인덱스의 이미지가 없을 경우 placeholderImage 사용
+                      const imageUrl = clusterImages[index]?.url || placeholderImage;
+                      return transformClusterToImageData(cluster, index, imageUrl);
+                    });
+                    // profileImages 저장
+                    localStorage.setItem('profileImages', JSON.stringify(profileImages));
+                    console.log('✨ 프로필 데이터 저장 성공!');
+                    alert('프로필 데이터가 성공적으로 저장되었습니다!');
+                  }
+                }}
                 asChild 
                 size="lg" 
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 transition-all px-16 py-8 text-2xl font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-[1.02] text-white"
@@ -1539,6 +1583,65 @@ CLUSTER_END`;
           </div>
         )}
       </div>
+
+      {/* 검색 결과 모달 */}
+      {showVisionResults && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Vision 검색 결과</h3>
+              <Button
+                variant="ghost"
+                onClick={() => setShowVisionResults(false)}
+                className="hover:bg-gray-100"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+            
+            {/* 유사 이미지 */}
+            <div className="mb-6">
+              <h4 className="font-medium mb-3">유사한 이미지</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {visionSearchResults.similarImages.map((img, idx) => (
+                  <div key={idx} className="relative aspect-square">
+                    <img
+                      src={img.url}
+                      alt={`Similar image ${idx + 1}`}
+                      className="w-full h-full object-cover rounded-lg"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = placeholderImage;
+                      }}
+                    />
+                    <div className="absolute bottom-0 right-0 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded-bl-lg">
+                      {(img.score * 100).toFixed(0)}% 유사
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* 관련 레이블 */}
+            <div>
+              <h4 className="font-medium mb-3">관련 키워드</h4>
+              <div className="flex flex-wrap gap-2">
+                {visionSearchResults.labels.map((label, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1.5 bg-gray-100 rounded-full text-sm"
+                    title={`신뢰도: ${(label.score * 100).toFixed(0)}%`}
+                  >
+                    {label.description}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

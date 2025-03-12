@@ -21,21 +21,21 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full">
-      <div className="w-full flex h-20 items-center justify-between backdrop-blur-sm bg-white/10">
+      <div className="w-full flex h-14 items-center justify-between backdrop-blur-sm bg-white/10">
         <div className="pl-[20px] flex items-center gap-4">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex items-center gap-3">
-              <Youtube className="w-8 h-8 text-blue-500" />
+              <Youtube className="w-6 h-6 text-blue-500" />
             </div>
-            <span className="text-3xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
               TubeReframe
             </span>
           </Link>
           {isMainPage && (
             <HoverCard openDelay={100} closeDelay={200}>
               <HoverCardTrigger className="flex items-center gap-2 text-gray-500 hover:text-gray-800 transition-colors">
-                <span className="text-l font-medium">TubeReframe이 궁금하신가요?</span>
-                <HelpCircle className="w-8 h-8" />
+                <span className="text-sm font-medium">TubeReframe이 궁금하신가요?</span>
+                <HelpCircle className="w-5 h-5" />
               </HoverCardTrigger>
               <HoverCardContent 
                 className="w-[600px] p-8 backdrop-blur-sm bg-white/95 border-t-0 rounded-t-none shadow-2xl"
@@ -77,17 +77,17 @@ export function Navbar() {
         <nav className="hidden md:flex pr-[20px]">
           {!isMainPage && (
             <>
-              <Button asChild variant="ghost" size="lg" className="text-2xl font-medium hover:text-primary">
+              <Button asChild variant="ghost" size="sm" className="text-base font-medium hover:text-primary">
                 <Link href="/my_profile">
                   마이페이지
                 </Link>
               </Button>
-              <Button asChild variant="ghost" size="lg" className="text-2xl font-medium hover:text-primary">
+              <Button asChild variant="ghost" size="sm" className="text-base font-medium hover:text-primary">
                 <Link href="/watch-history">
                   시청기록
                 </Link>
               </Button>
-              <Button asChild variant="ghost" size="lg" className="text-2xl font-medium hover:text-primary">
+              <Button asChild variant="ghost" size="sm" className="text-base font-medium hover:text-primary">
                 <Link href="/login">
                   로그인
                 </Link>
@@ -99,7 +99,7 @@ export function Navbar() {
         <Sheet>
           <SheetTrigger asChild className="md:hidden pr-[20px]">
             <Button variant="ghost" size="icon">
-              <Menu className="h-10 w-10" />
+              <Menu className="h-6 w-6" />
               <span className="sr-only">메뉴 열기</span>
             </Button>
           </SheetTrigger>
