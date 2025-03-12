@@ -14,8 +14,8 @@ export async function GET(request: Request) {
     if (!clientId || !clientSecret) {
       console.error('Missing Naver API credentials');
       return NextResponse.json(
-        { error: 'Server configuration error - Missing API credentials' },
-        { status: 500 }
+        { error: 'API 인증 정보가 없습니다.' },
+        { status: 401 }
       );
     }
 
@@ -24,26 +24,31 @@ export async function GET(request: Request) {
     const category = searchParams.get('category') || '';
     const mood = searchParams.get('mood') || '';
 
+    if (!query.trim()) {
+      return NextResponse.json(
+        { error: '검색어를 입력해주세요.' },
+        { status: 400 }
+      );
+    }
+
     // 검색 쿼리 최적화
     if (category) {
-      // 카테고리가 있는 경우, 카테고리를 검색어에 추가
       query = `${query} ${category}`;
     }
     
     if (mood) {
-      // 감성 키워드가 있는 경우, 감성을 검색어에 추가
       query = `${query} ${mood}`;
     }
+
+    console.log('최종 검색 쿼리:', query);
 
     // 검색 필터 추가
     const searchOptions = new URLSearchParams({
       query: query,
-      display: '10', // 더 많은 결과를 가져와서 필터링
-      filter: 'large', // 큰 이미지만
-      sort: 'sim' // 정확도 순 정렬
+      display: '10',
+      filter: 'large',
+      sort: 'sim'
     });
-
-    console.log('Searching Naver API with query:', query);
 
     const response = await fetch(
       `https://openapi.naver.com/v1/search/image?${searchOptions.toString()}`,
@@ -64,12 +69,13 @@ export async function GET(request: Request) {
       });
       
       return NextResponse.json(
-        { error: `Naver API error: ${response.status} - ${errorText}` },
+        { error: `네이버 API 오류: ${response.status} - ${errorText}` },
         { status: response.status }
       );
     }
 
     const data = await response.json();
+    console.log('검색 결과 수:', data.items?.length || 0);
 
     // 결과 필터링 및 정제
     if (data.items && data.items.length > 0) {
@@ -86,11 +92,19 @@ export async function GET(request: Request) {
       }
     }
 
+    // 검색 결과가 없는 경우
+    if (!data.items || data.items.length === 0) {
+      return NextResponse.json(
+        { error: '검색 결과가 없습니다.' },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('Search image error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch image' },
+      { error: error instanceof Error ? error.message : '이미지 검색 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }

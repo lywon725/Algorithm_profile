@@ -31,6 +31,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { myProfileImages } from '../data/dummyProfiles';
 import { ImageData } from '@/types/profile';
+import { useToast } from "@/components/ui/use-toast";
 
 // OpenAI 클라이언트 초기화
 const openai = new OpenAI({
@@ -120,7 +121,7 @@ function DraggableImage({
 
   const [watchedVideos, setWatchedVideos] = useState<string[]>([]);
   const [showImageModal, setShowImageModal] = useState(false);
-  const [alternativeImages, setAlternativeImages] = useState<UnsplashImage[]>([]);
+  const [alternativeImages, setAlternativeImages] = useState<any[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
   const [aiRecommendedVideos, setAiRecommendedVideos] = useState<VideoData[]>([]);
   const [isLoadingAiVideos, setIsLoadingAiVideos] = useState(false);
@@ -289,71 +290,60 @@ function DraggableImage({
     onFrameStyleChange(image.id, e.target.value as 'healing' | 'inspiration' | 'people' | 'interest' | 'star');
   };
 
-  // Unsplash 이미지 검색 함수
+  // 네이버 이미지 검색 함수
   const fetchAlternativeImages = async () => {
     setIsLoadingImages(true);
     try {
-      if (!process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY) {
-        throw new Error('Unsplash API key is not configured');
-      }
-
-      const keywordMap = {
-        '따뜻한': ['warm', 'cozy', 'sunlight', 'morning'],
-        '가족': ['family', 'together', 'home', 'love'],
-        '일상': ['daily', 'lifestyle', 'life', 'moment'],
-        '감성': ['mood', 'emotional', 'aesthetic', 'atmosphere'],
-        '포토': ['photo', 'photography', 'camera', 'picture'],
-        '힐링': ['healing', 'peaceful', 'calm', 'relax'],
-        '여유': ['relaxing', 'leisure', 'slow', 'peace'],
-        '휴식': ['rest', 'break', 'comfort', 'quiet'],
-        '밤': ['night', 'evening', 'dark', 'moonlight'],
-        '자연': ['nature', 'outdoor', 'natural', 'landscape'],
-        '풍경': ['landscape', 'scenery', 'view', 'scenic'],
-        '평화': ['peaceful', 'tranquil', 'serene', 'harmony'],
-        '아늑함': ['cozy', 'comfortable', 'snug', 'warm'],
-        '집': ['home', 'house', 'interior', 'living'],
-        '편안': ['comfort', 'comfortable', 'relaxed', 'ease'],
-        '추억': ['memories', 'nostalgia', 'vintage', 'moment'],
-        '기록': ['diary', 'journal', 'record', 'document']
-      };
-
-      const firstKeyword = image.keywords[0];
-      // 키워드 배열에서 랜덤하게 2개 선택
-      const keywordOptions = keywordMap[firstKeyword] || ['mood'];
-      const randomKeywords = keywordOptions
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 2)
-        .join(' ');
-
-      // 페이지 번호도 랜덤하게 설정 (1~5 페이지 중 랜덤)
-      const randomPage = Math.floor(Math.random() * 5) + 1;
-
-      const response = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(randomKeywords)}&per_page=4&page=${randomPage}&orientation=landscape`,
-        {
-          headers: {
-            'Authorization': `Client-ID ${process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY}`,
-            'Accept-Version': 'v1'
-          }
-        }
-      );
+      // 검색 키워드 설정
+      const searchKeywords = [image.main_keyword, ...image.keywords].slice(0, 2).join(' ');
+      console.log('검색 키워드:', searchKeywords);
+      
+      // 네이버 이미지 검색 API 호출
+      const response = await fetch('/api/search-image?' + new URLSearchParams({
+        query: searchKeywords
+      }));
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        console.error('이미지 검색 API 에러:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        throw new Error(`이미지 검색 실패 (${response.status}): ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('Search results:', data);
+      console.log('검색 결과:', data);
       
-      // 결과도 랜덤하게 섞기
-      const shuffledResults = data.results
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 4);
-      
-      setAlternativeImages(shuffledResults);
+      // 검색 결과가 있는 경우
+      if (data.items && data.items.length > 0) {
+        // 결과를 랜덤하게 섞어서 최대 4개만 선택
+        const shuffledResults = data.items
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 4)
+          .map((item: any) => ({
+            id: item.link,
+            urls: {
+              regular: item.link
+            },
+            alt_description: item.title.replace(/<\/?b>/g, '')
+          }));
+        
+        setAlternativeImages(shuffledResults);
+      } else {
+        console.log('검색 결과 없음');
+        setAlternativeImages([]);
+      }
     } catch (error) {
-      console.error('Failed to fetch images:', error);
+      console.error('이미지 검색 실패:', error);
+      setAlternativeImages([]);
+      // 에러 메시지 표시
+      toast({
+        title: "이미지 검색 실패",
+        description: error instanceof Error ? error.message : "이미지를 검색하는 중에 오류가 발생했습니다.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoadingImages(false);
     }
@@ -366,8 +356,8 @@ function DraggableImage({
     }
   }, [showImageModal]);
 
-  // 이미지 선택 핸들러도 수정
-  const handleImageSelect = async (selectedImage: UnsplashImage) => {
+  // 이미지 선택 핸들러
+  const handleImageSelect = async (selectedImage: any) => {
     try {
       const newSrc = selectedImage.urls.regular;
       const newKeyword = selectedImage.alt_description || image.main_keyword;
@@ -377,7 +367,7 @@ function DraggableImage({
       
       setShowImageModal(false);
     } catch (error) {
-      console.error('Failed to update image:', error);
+      console.error('이미지 업데이트 실패:', error);
     }
   };
 
@@ -632,7 +622,7 @@ function DraggableImage({
               <DialogTitle>이미지 변경</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-12 gap-6 h-[calc(100%-60px)]">
-              {/* 기존 이미지 (좌측) - 50% 크기로 조정 */}
+              {/* 기존 이미지 (좌측) */}
               <div className="col-span-6 flex items-center justify-center">
                 <div className="w-[80%] aspect-square relative rounded-lg overflow-hidden border-2 border-blue-500 shadow-lg">
                   <img
@@ -643,7 +633,7 @@ function DraggableImage({
                 </div>
               </div>
 
-              {/* 새 이미지 선택 옵션 (우측) - 50% 영역에 4개 이미지 배치 */}
+              {/* 새 이미지 선택 옵션 (우측) */}
               <div className="col-span-6 space-y-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-base font-medium text-gray-700">새 이미지 선택</p>
@@ -661,7 +651,7 @@ function DraggableImage({
                       <div key={index} className="aspect-square bg-gray-100 animate-pulse rounded-lg" />
                     ))}
                   </div>
-                ) : alternativeImages && alternativeImages.length > 0 ? (
+                ) : alternativeImages.length > 0 ? (
                   <div className="grid grid-cols-2 gap-4 p-4">
                     {alternativeImages.map((altImage) => (
                       <div 
@@ -673,6 +663,10 @@ function DraggableImage({
                           src={altImage.urls.regular}
                           alt={altImage.alt_description || '대체 이미지'}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/images/placeholder.jpg';
+                          }}
                         />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <button className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full font-medium hover:bg-white transition-colors">
@@ -1282,37 +1276,49 @@ export default function MyProfilePage() {
       // 각 단계별로 딜레이를 주며 진행
       for (let i = 0; i < generatingSteps.length; i++) {
         setGeneratingStep(i);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // 각 단계별 1.5초 딜레이
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
 
-      const clusters = JSON.parse(localStorage.getItem('watchClusters') || '[]');
-      console.log('클러스터 데이터:', clusters); // 디버깅용 로그
-      
-      if (!clusters || clusters.length === 0) {
+      // localStorage에서 profileImages 데이터 가져오기
+      const profileImagesData = localStorage.getItem('profileImages');
+      console.log('프로필 이미지 데이터:', profileImagesData);
+
+      if (!profileImagesData) {
         const defaultProfile = {
           nickname: '알고리즘 탐험가',
-          description: '아직 충분한 시청 기록이 없습니다. 더 많은 영상을 시청하고 분석해보세요!'
+          description: '아직 프로필 이미지가 없습니다. 메인 페이지에서 "Tell me who I am"을 클릭하여 프로필을 생성해보세요!'
         };
         setProfile(defaultProfile);
         return;
       }
 
-      const prompt = `
-당신은 사용자의 YouTube 시청 패턴을 분석하여 그들의 성격과 취향을 파악하는 전문가입니다.
-다음은 사용자의 YouTube 시청 기록을 분석한 클러스터 정보입니다:
+      const profileImages = JSON.parse(profileImagesData);
+      
+      // 프롬프트 생성을 위한 데이터 가공
+      const imageData = Object.values(profileImages).map((image: any) => ({
+        main_keyword: image.main_keyword,
+        category: image.category,
+        description: image.description,
+        mood_keyword: image.mood_keyword,
+        keywords: image.keywords
+      }));
 
-${clusters.map((cluster: any, index: number) => `
-클러스터 ${index + 1}:
-- 주요 키워드: ${cluster.main_keyword || '정보 없음'}
-- 카테고리: ${cluster.category || '미분류'}
-- 설명: ${cluster.description || '정보 없음'}
-- 감성 키워드: ${cluster.mood_keyword || '정보 없음'}
-- 관련 키워드: ${cluster.keyword_list || '정보 없음'}
+      const prompt = `
+당신은 사용자의 관심사와 성향을 분석하여 그들의 성격과 취향을 파악하는 전문가입니다.
+다음은 사용자의 관심사와 성향을 분석한 정보입니다:
+
+${imageData.map((image: any, index: number) => `
+이미지 ${index + 1}:
+- 주요 키워드: ${image.main_keyword || '정보 없음'}
+- 카테고리: ${image.category || '미분류'}
+- 설명: ${image.description || '정보 없음'}
+- 감성 키워드: ${image.mood_keyword || '정보 없음'}
+- 관련 키워드: ${image.keywords?.join(', ') || '정보 없음'}
 `).join('\n')}
 
 위 정보를 바탕으로 다음 두 가지를 한국어로 생성해주세요:
 
-1. 사용자의 대표 클러스터를 종합하여 봤을때, 여러가지를 혼합하여 새로운 키워드로 취향과 성격을 반영한 독특하고 창의적인 짧은 명사 별명 (예: "감성적인 여행자", "호기심 많은 지식탐험가" 등)
+1. 사용자의 대표 관심사를 종합하여 봤을때, 여러가지를 혼합하여 새로운 키워드로 취향과 성격을 반영한 독특하고 창의적인 짧은 명사 별명 (예: "감성적인 여행자", "호기심 많은 지식탐험가" 등)
 2. 중요!!: 별명 생성시 재밌는 동물, 물건, 이름등으로 은유법이나 비유 명사를 무조건 활용해야함 ("예: 현아를 좋아하는 사과, 토끼)
 3. 사용자의 콘텐츠 소비 패턴, 취향, 관심사를 2-3문장으로 짧게 재밌게 흥미롭게 요약한 설명, 사용자를 예측해도 됨
 
@@ -1321,7 +1327,7 @@ ${clusters.map((cluster: any, index: number) => `
 설명: [생성된 설명]
 `;
 
-      console.log('OpenAI 요청 시작'); // 디버깅용 로그
+      console.log('OpenAI 요청 시작');
       const completion = await openai.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
@@ -1339,12 +1345,10 @@ ${clusters.map((cluster: any, index: number) => `
         nickname: nicknameMatch ? nicknameMatch[1].trim() : '알고리즘 탐험가',
         description: descriptionMatch 
           ? descriptionMatch[1].trim() 
-          : '당신만의 독특한 콘텐츠 취향을 가지고 있습니다. 더 많은 영상을 시청하고 분석해보세요!'
+          : '당신만의 독특한 콘텐츠 취향을 가지고 있습니다. 메인 페이지에서 더 많은 관심사를 추가해보세요!'
       };
 
       console.log('새로운 프로필:', newProfile);
-      
-      // 상태 업데이트
       setProfile(newProfile);
       
     } catch (error) {
