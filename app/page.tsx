@@ -436,6 +436,8 @@ CLUSTER_END`;
             if (!titleElement) return null;
 
             const title = titleElement.textContent?.split(' 을(를) 시청했습니다.')[0];
+            if (!title) return null; // title이 없는 경우 먼저 체크
+
             const videoUrl = titleElement.getAttribute('href') || '';
             const videoId = videoUrl.match(/(?:v=|youtu\.be\/)([^&?]+)/)?.[1];
 
@@ -448,7 +450,19 @@ CLUSTER_END`;
 
             const date = new Date(dateMatch[0].replace(/\./g, '-'));
 
-            if (!videoId || !title) return null;
+            // 광고 영상 필터링
+            const isAd = (
+              title.includes('광고') || 
+              title.includes('Advertising') ||
+              title.includes('AD:') ||
+              channelName.includes('광고') ||
+              videoUrl.includes('/ads/') ||
+              videoUrl.includes('&ad_type=') ||
+              videoUrl.includes('&adformat=')
+            );
+
+            if (isAd) return null;
+            if (!videoId) return null;
 
             return {
               title,
@@ -469,10 +483,29 @@ CLUSTER_END`;
         throw new Error('시청기록을 찾을 수 없습니다.');
       }
 
-      // 최근 순으로 정렬하고 30개만 선택
-      const recentWatchHistory = watchHistory
-        .sort((a, b) => b.date.getTime() - a.date.getTime())
-        .slice(0, 30);
+      // 날짜별로 그룹화하고 각 날짜에서 30개씩만 선택
+      const groupedByDate = watchHistory.reduce((acc: { [key: string]: any[] }, item) => {
+        const dateStr = item.date.toISOString().split('T')[0];
+        if (!acc[dateStr]) {
+          acc[dateStr] = [];
+        }
+        acc[dateStr].push(item);
+        return acc;
+      }, {});
+
+      // 날짜별로 정렬하고 최상단 일주일만 선택
+      const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      const topWeekDates = sortedDates.slice(0, 7);
+
+      // 각 날짜에서 30개씩만 선택하고 병합
+      const recentWatchHistory = topWeekDates
+        .map(dateStr => 
+          groupedByDate[dateStr]
+            .sort((a, b) => b.date.getTime() - a.date.getTime())
+            .slice(0, 30)
+        )
+        .flat()
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
 
       console.log('파싱된 전체 항목 수:', watchItems.length);
       console.log('처리할 시청기록 수:', recentWatchHistory.length);
@@ -480,37 +513,70 @@ CLUSTER_END`;
       // 각 비디오 정보 가져오기 (병렬 처리로 최적화)
       let successCount = 0;
       const batchSize = 5; // 한 번에 처리할 비디오 수
+      const totalVideos = recentWatchHistory.length;
 
+      console.log('처리할 총 비디오 수:', totalVideos);
+      console.log('시청기록 데이터:', recentWatchHistory);
+
+      // 각 비디오 정보 가져오기
       for (let i = 0; i < recentWatchHistory.length; i += batchSize) {
         const batch = recentWatchHistory.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(async (item) => {
-            try {
-              await fetchVideoInfo(item.videoId);
-              successCount++;
-            } catch (error) {
-              console.error(`비디오 정보 가져오기 실패 (${item.videoId}):`, error);
-            }
-          })
-        );
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log(`배치 ${Math.floor(i/batchSize) + 1} 처리 시작:`, batch);
+
+        try {
+          const results = await Promise.all(
+            batch.map(async (item) => {
+              try {
+                console.log(`비디오 처리 시작: ${item.videoId}`);
+                const success = await fetchVideoInfo(item.videoId);
+                console.log(`비디오 처리 결과: ${item.videoId} - ${success ? '성공' : '실패'}`);
+                return success;
+              } catch (error) {
+                console.error(`비디오 정보 가져오기 실패 (${item.videoId}):`, error);
+                return false;
+              }
+            })
+          );
+
+          // 성공한 비디오 수 업데이트
+          const batchSuccessCount = results.filter(Boolean).length;
+          successCount += batchSuccessCount;
+          
+          console.log(`배치 처리 완료: ${batchSuccessCount}개 성공 (총 ${successCount}/${totalVideos})`);
+          
+          // 상태 업데이트
+          setSuccessCount(successCount);
+          
+          // API 호출 간격 조절
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (error) {
+          console.error(`배치 처리 중 오류 발생:`, error);
+        }
       }
 
-      alert(`${successCount}개의 시청기록이 성공적으로 처리되었습니다!`);
+      // 최종 결과 확인
+      const savedHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+      console.log('저장된 시청 기록:', savedHistory);
+      
+      alert(`${successCount}개의 시청기록이 성공적으로 처리되었습니다! (총 ${totalVideos}개 중)`);
 
       // 저장된 시청 기록 분석
-      const savedHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
-      const clusters = await analyzeKeywordsWithOpenAI(savedHistory);
-      localStorage.setItem('watchClusters', JSON.stringify(clusters));
+      if (savedHistory.length > 0) {
+        const clusters = await analyzeKeywordsWithOpenAI(savedHistory);
+        localStorage.setItem('watchClusters', JSON.stringify(clusters));
 
-      console.log('분석 완료:', {
-        totalVideos: savedHistory.length,
-        totalClusters: clusters.length,
-        topCategories: clusters.slice(0, 3).map(c => ({
-          category: c.main_keyword,
-          strength: c.strength
-        }))
-      });
+        console.log('분석 완료:', {
+          totalVideos: savedHistory.length,
+          totalClusters: clusters.length,
+          topCategories: clusters.slice(0, 3).map(c => ({
+            category: c.main_keyword,
+            strength: c.strength
+          }))
+        });
+      } else {
+        console.error('저장된 시청 기록이 없습니다.');
+        alert('시청 기록이 저장되지 않았습니다. 다시 시도해주세요.');
+      }
     } catch (err) {
       console.error('시청기록 파싱 실패:', err);
       setError(err instanceof Error ? err.message : '시청기록 파일 처리 중 오류가 발생했습니다.');
@@ -1158,18 +1224,18 @@ CLUSTER_END`;
                 `}</style>
                 <p className="text-sm text-gray-500">
                   {isLoading ? (
-                    <div className="w-full max-w-md mx-auto">
-                      <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-                        <div 
+                    <span className="w-full max-w-md mx-auto">
+                      <span className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <span 
                           className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
                           style={{ 
                             width: `${(successCount / 30) * 100}%`,
                             animation: 'progress-animation 1.5s ease-in-out infinite'
                           }}
                         />
-                      </div>
-                      <p className="mt-2 text-sm text-gray-600">{successCount}/30개 분석 완료</p>
-                    </div>
+                      </span>
+                      <span className="mt-2 text-sm text-gray-600">{successCount}/30개 분석 완료</span>
+                    </span>
                   ) : (
                     '파일을 드래그하거나 클릭하여 업로드'
                   )}

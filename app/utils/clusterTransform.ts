@@ -42,10 +42,10 @@ export const transformClusterToImageData = (
   const keywords = cluster.keyword_list?.split(',').map((k: string) => k.trim()) || [];
 
   // strength 기반으로 sizeWeight 계산
-  // strength가 높을수록 크기가 커지도록 설정 (0.1 ~ 0.5 범위)
+  // strength가 높을수록 크기가 커지도록 설정 (0.05 ~ 0.3 범위)
   const strength = cluster.strength || cluster.metadata?.videoCount || 1;
   const maxStrength = 10; // 예상되는 최대 strength 값
-  const sizeWeight = Math.min(0.1 + (strength / maxStrength) * 0.4, 0.5);
+  const sizeWeight = Math.min(0.05 + (strength / maxStrength) * 0.15, 0.2);
 
   return {
     id: String(index + 1),

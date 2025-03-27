@@ -28,7 +28,7 @@ export function Navbar() {
               <Youtube className="w-6 h-6 text-blue-500" />
             </div>
             <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-              TubeReframe
+              TubeLens
             </span>
           </Link>
           {isMainPage && (

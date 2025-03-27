@@ -13,7 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Edit2, Save, CheckCircle2, RefreshCw, Search } from "lucide-react";
+import { Edit2, Save, CheckCircle2, RefreshCw, Search, X } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -166,7 +166,8 @@ function DraggableImage({
     }
     switch (frameStyle) {
       case 'inspiration':
-        return 'polygon(50% 0%, 100% 100%, 0% 100%)';
+        // 12개의 꼭지점을 가진 부드러운 별 모양 (꽃 모양)
+        return 'polygon(50% 0%, 61% 20%, 75% 20%, 80% 35%, 95% 40%, 90% 55%, 100% 65%, 90% 75%, 85% 90%, 70% 85%, 50% 100%, 30% 85%, 15% 90%, 10% 75%, 0% 65%, 10% 55%, 5% 40%, 20% 35%, 25% 20%, 39% 20%)';
       case 'interest':
         return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)';
       default:
@@ -460,8 +461,8 @@ function DraggableImage({
           style={{
             ...style,
             position: 'absolute',
-            width: image.width * image.sizeWeight*4,
-            height: (image.height + 80) * image.sizeWeight*4,
+            width: image.width * (image.desired_self ? image.sizeWeight * 2 : image.sizeWeight * 4),
+            height: (image.height + 80) * (image.desired_self ? image.sizeWeight * 2 : image.sizeWeight * 4),
             left: image.left,
             top: image.top,
             transform: transform ? 
@@ -537,11 +538,11 @@ function DraggableImage({
                 </div>
                 
                 {/* 키워드를 이미지 하단에 배치 */}
-                <div className="absolute bottom-0.5 left-0 right-0 flex flex-wrap gap-1 justify-center items-center p-2">
+                <div className="absolute bottom-0.5 left-0 right-0 flex flex-wrap gap-1 justify-center items-center p-1">
                   {image.keywords.map((keyword, idx) => (
                     <span
                       key={idx}
-                      className="inline-block px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm rounded-full shadow-sm transition-colors"
+                      className="inline-block px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm rounded-full shadow-sm transition-colors"
                     >
                       #{keyword}
                     </span>
@@ -600,7 +601,7 @@ function DraggableImage({
                 ) : (
                   <>
                     <option value="healing">⬛️ 나에게 힐링이 되는 영상</option>
-                    <option value="inspiration">🔺 영감을 주는 영상</option>
+                    <option value="inspiration">⬡ 영감을 주는 영상</option>
                     <option value="people">⚪️ 내가 좋아하는 사람</option>
                     <option value="interest">🔶 나만의 관심사</option>
                   </>
@@ -608,31 +609,12 @@ function DraggableImage({
               </select>
             </div>
           )}
-          <div
-            className={`absolute top-2 right-2 w-4 h-4 bg-${image.color}-200 rounded-full shadow-sm`}
-          />
           {isEditing && (
             <div
               className="absolute inset-0 z-10"
               {...listeners}
               {...attributes}
             />
-          )}
-
-          {!isEditing && !isSearchMode && (
-            <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 z-40">
-              <button
-                onClick={() => setShowThumbnailModal(true)}
-                className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-white transition-colors shadow-lg flex items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M16 8h.01"/>
-                </svg>
-                관련 영상 썸네일
-              </button>
-            </div>
           )}
         </div>
       </Sheet>
@@ -776,160 +758,133 @@ function DraggableImage({
           style={{
             width: '50vw',
             maxWidth: '60vw',
-            height: '100vh'
+            height: '100vh',
+            background: 'transparent',
+            border: 'none',
+            boxShadow: 'none'
           }}
           className="overflow-y-auto p-0"
         >
-          <div className="flex items-center justify-between p-4 border-b">
-          </div>
+          <div 
+            className="bg-white rounded-lg shadow-xl h-full overflow-hidden"
+            style={{
+              position: 'relative',
+              cursor: 'move'
+            }}
+            {...listeners}
+            {...attributes}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-semibold">{image.main_keyword}</h2>
+              <Button variant="ghost" size="icon" onClick={() => setShowDetails(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
 
-          <div className="h-full overflow-y-auto px-4">
-            <div className="flex flex-col w-full max-w-[85vw] mx-auto pb-8">
-              <div className="relative w-full h-[400px] flex-shrink-0">
-                <img
-                  src={image.src}
-                  alt={image.main_keyword}
-                  className="w-full h-full object-cover rounded-lg"
-                />
-                
-                <div className="absolute top-4 right-4">
-                  <span className="px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white font-medium">
-                    {image.category}
-                  </span>
-                </div>
-              </div>
-              <div className="mt-6 space-y-8">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-emerald-50 rounded-xl p-4 text-center">
-                    <h4 className="text-sm font-medium text-emerald-600 mb-2">메인 키워드</h4>
-                    <p className="text-xl font-bold text-emerald-900">#{image.main_keyword}</p>
-                  </div>
+            <div className="h-[calc(100%-60px)] overflow-y-auto px-4">
+              <div className="flex flex-col w-full max-w-[85vw] mx-auto pb-8">
+                <div className="relative w-full h-[400px] flex-shrink-0">
+                  <img
+                    src={image.src}
+                    alt={image.main_keyword}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
                   
-                  <div className="bg-purple-50 rounded-xl p-4 text-center">
-                    <h4 className="text-sm font-medium text-purple-600 mb-2">감성/분위기</h4>
-                    <p className="text-xl font-bold text-purple-900">#{image.mood_keyword}</p>
-                  </div>
-                  
-                  <div className="bg-blue-50 rounded-xl p-4 text-center">
-                    <h4 className="text-sm font-medium text-blue-600 mb-2">서브 키워드</h4>
-                    <p className="text-xl font-bold text-blue-900">#{image.sub_keyword}</p>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-gray-800">관심도</h4>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      image.sizeWeight >= 1.2 ? "bg-red-100 text-red-700" :
-                      image.sizeWeight >= 0.8 ? "bg-yellow-100 text-yellow-700" :
-                      "bg-blue-100 text-blue-700"
-                    }`}>
-                      {image.sizeWeight >= 1.2 ? "강" :
-                      image.sizeWeight >= 0.8 ? "중" : "약"}
+                  <div className="absolute top-4 right-4">
+                    <span className="px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white font-medium">
+                      {image.category}
                     </span>
                   </div>
-                  
-                  <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
-                        image.sizeWeight >= 1.2 ? "bg-gradient-to-r from-red-400 to-red-500" :
-                        image.sizeWeight >= 0.8 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
-                        "bg-gradient-to-r from-blue-400 to-blue-500"
-                      }`}
-                      style={{ width: `${Math.min(image.sizeWeight * 50, 100)}%` }}
-                    />
+                </div>
+                <div className="mt-6 space-y-8">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                      <h4 className="text-sm font-medium text-emerald-600 mb-2">메인 키워드</h4>
+                      <p className="text-xl font-bold text-emerald-900">#{image.main_keyword}</p>
+                    </div>
+                    
+                    <div className="bg-purple-50 rounded-xl p-4 text-center">
+                      <h4 className="text-sm font-medium text-purple-600 mb-2">감성/분위기</h4>
+                      <p className="text-xl font-bold text-purple-900">#{image.mood_keyword}</p>
+                    </div>
+                    
+                    <div className="bg-blue-50 rounded-xl p-4 text-center">
+                      <h4 className="text-sm font-medium text-blue-600 mb-2">서브 키워드</h4>
+                      <p className="text-xl font-bold text-blue-900">#{image.sub_keyword}</p>
+                    </div>
                   </div>
 
-                  <p className="mt-3 text-sm text-gray-600">
-                    {image.sizeWeight >= 1.2 ? "이 주제에 대한 높은 관심도를 보입니다" :
-                    image.sizeWeight >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
-                    "이 주제에 대해 가볍게 관심을 두고 있습니다"}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <h4 className="text-lg font-semibold mb-3">이미지 설명</h4>
-                  <p className="text-gray-700">{image.description}</p>
-                </div>
-
-                <div>
-                  <h4 className="text-lg font-semibold mb-3">관련 키워드</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {image.keywords.map((keyword, idx) => (
-                      <span
-                        key={idx}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors"
-                      >
-                        #{keyword}
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold text-gray-800">관심도</h4>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        image.sizeWeight >= 1.2 ? "bg-red-100 text-red-700" :
+                        image.sizeWeight >= 0.8 ? "bg-yellow-100 text-yellow-700" :
+                        "bg-blue-100 text-blue-700"
+                      }`}>
+                        {image.sizeWeight >= 1.2 ? "강" :
+                        image.sizeWeight >= 0.8 ? "중" : "약"}
                       </span>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                    
+                    <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                          image.sizeWeight >= 1.2 ? "bg-gradient-to-r from-red-400 to-red-500" :
+                          image.sizeWeight >= 0.8 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
+                          "bg-gradient-to-r from-blue-400 to-blue-500"
+                        }`}
+                        style={{ width: `${Math.min(image.sizeWeight * 50, 100)}%` }}
+                      />
+                    </div>
 
-                <div className="space-y-9">
-                  {!image.desired_self ? (
-                    <Tabs defaultValue="history" className="w-full">
-                      <div className="bg-gray-70/70 rounded-lg">
-                        <TabsList className="w-full grid grid-cols-2 py-0">
-                          <TabsTrigger value="history" className="text-xl py-1">Where this image from</TabsTrigger>
-                          <TabsTrigger value="AI" className="text-xl py-1">The way Algorithm see you</TabsTrigger>
-                        </TabsList>
-                        <br/> <br/>
-                        
-                        <TabsContent value="history" className="px-6 pb-6">
-                          <div className="grid gap-8">
-                            {image.relatedVideos.map((video, idx) => (
-                              <div key={idx} className="space-y-2">
-                                <h5 className="text-lg font-medium text-gray-800 mb-2">{video.title}</h5>
-                                <div 
-                                  className="relative w-full pt-[56.25%] bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
-                                  onClick={() => handleVideoClick(video)}
-                                >
-                                  <iframe
-                                    id={`player-${video.embedId}`}
-                                    className="absolute inset-0 w-full h-full"
-                                    src={`https://www.youtube.com/embed/${video.embedId}?enablejsapi=1`}
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    allowFullScreen
-                                  />
-                                  <div className={`absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-sm transition-all duration-300 ${
-                                    watchedVideos.includes(video.embedId) 
-                                      ? "bg-green-500/80 text-white" 
-                                      : "bg-gray-900/80 text-gray-200"
-                                  }`}>
-                                    <CheckCircle2 className={`h-4 w-4 ${
-                                      watchedVideos.includes(video.embedId)
-                                        ? "text-white"
-                                        : "text-gray-400"
-                                    }`} />
-                                    <span className="text-sm font-medium">
-                                      {watchedVideos.includes(video.embedId) ? "시청함" : "시청안함"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </TabsContent>
-                        
-                        <TabsContent value="AI" className="px-6 pb-6">
-                          <div className="grid gap-8">
-                            {isLoadingAiVideos ? (
-                              <div className="flex justify-center items-center py-12">
-                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-                              </div>
-                            ) : aiRecommendedVideos.length > 0 ? (
-                              aiRecommendedVideos.map((video, idx) => (
+                    <p className="mt-3 text-sm text-gray-600">
+                      {image.sizeWeight >= 1.2 ? "이 주제에 대한 높은 관심도를 보입니다" :
+                      image.sizeWeight >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
+                      "이 주제에 대해 가볍게 관심을 두고 있습니다"}
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <h4 className="text-lg font-semibold mb-3">이미지 설명</h4>
+                    <p className="text-gray-700">{image.description}</p>
+                  </div>
+
+                  <div>
+                    <h4 className="text-lg font-semibold mb-3">관련 키워드</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {image.keywords.map((keyword, idx) => (
+                        <span
+                          key={idx}
+                          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors"
+                        >
+                          #{keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-9">
+                    {!image.desired_self ? (
+                      <Tabs defaultValue="history" className="w-full">
+                        <div className="bg-gray-70/70 rounded-lg">
+                          <TabsList className="w-full grid grid-cols-2 py-0">
+                            <TabsTrigger value="history" className="text-xl py-1">Where this image from</TabsTrigger>
+                            <TabsTrigger value="AI" className="text-xl py-1">The way Algorithm see you</TabsTrigger>
+                          </TabsList>
+                          <br/> <br/>
+                          
+                          <TabsContent value="history" className="px-6 pb-6">
+                            <div className="grid gap-8">
+                              {image.relatedVideos.map((video, idx) => (
                                 <div key={idx} className="space-y-2">
-                                  <h5 className="text-lg font-medium text-gray-800 mb-2">
-                                    <span className="text-blue-500 font-semibold">AI 추천:</span> {video.title}
-                                  </h5>
+                                  <h5 className="text-lg font-medium text-gray-800 mb-2">{video.title}</h5>
                                   <div 
                                     className="relative w-full pt-[56.25%] bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
                                     onClick={() => handleVideoClick(video)}
                                   >
                                     <iframe
-                                      id={`player-ai-${video.embedId}`}
+                                      id={`player-${video.embedId}`}
                                       className="absolute inset-0 w-full h-full"
                                       src={`https://www.youtube.com/embed/${video.embedId}?enablejsapi=1`}
                                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -951,78 +906,122 @@ function DraggableImage({
                                     </div>
                                   </div>
                                 </div>
-                              ))
-                            ) : (
-                              <div className="text-center py-12">
-                                <p className="text-gray-500">
-                                  '{image.main_keyword}' 키워드에 대한 AI 추천 영상을 가져올 수 없습니다.
-                                </p>
-                                <button
-                                  onClick={fetchAiRecommendedVideos}
-                                  className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-                                >
-                                  다시 시도
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </TabsContent>
-                      </div>
-                    </Tabs>
-                  ) : (
-                    <div className="space-y-8">
-                      {/* 프로필 보기 버튼 */}
-                      <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl p-8">
-                        <div className="text-center space-y-4">
-                          <h3 className="text-xl font-semibold text-gray-800">
-                            이 이미지의 원본 프로필
-                          </h3>
-                          <p className="text-gray-600">
-                            이 이미지를 가져온 프로필을 방문하여 더 많은 관심사를 발견해보세요
-                          </p>
-                          <Button
-                            onClick={handleVisitProfile}
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-4 rounded-full text-lg font-semibold shadow-lg transform transition-all duration-300 hover:scale-105"
-                          >
-                            프로필 방문하기
-                          </Button>
+                              ))}
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="AI" className="px-6 pb-6">
+                            <div className="grid gap-8">
+                              {isLoadingAiVideos ? (
+                                <div className="flex justify-center items-center py-12">
+                                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                                </div>
+                              ) : aiRecommendedVideos.length > 0 ? (
+                                aiRecommendedVideos.map((video, idx) => (
+                                  <div key={idx} className="space-y-2">
+                                    <h5 className="text-lg font-medium text-gray-800 mb-2">
+                                      <span className="text-blue-500 font-semibold">AI 추천:</span> {video.title}
+                                    </h5>
+                                    <div 
+                                      className="relative w-full pt-[56.25%] bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
+                                      onClick={() => handleVideoClick(video)}
+                                    >
+                                      <iframe
+                                        id={`player-ai-${video.embedId}`}
+                                        className="absolute inset-0 w-full h-full"
+                                        src={`https://www.youtube.com/embed/${video.embedId}?enablejsapi=1`}
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                      />
+                                      <div className={`absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-sm transition-all duration-300 ${
+                                        watchedVideos.includes(video.embedId) 
+                                          ? "bg-green-500/80 text-white" 
+                                          : "bg-gray-900/80 text-gray-200"
+                                      }`}>
+                                        <CheckCircle2 className={`h-4 w-4 ${
+                                          watchedVideos.includes(video.embedId)
+                                            ? "text-white"
+                                            : "text-gray-400"
+                                        }`} />
+                                        <span className="text-sm font-medium">
+                                          {watchedVideos.includes(video.embedId) ? "시청함" : "시청안함"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-center py-12">
+                                  <p className="text-gray-500">
+                                    '{image.main_keyword}' 키워드에 대한 AI 추천 영상을 가져올 수 없습니다.
+                                  </p>
+                                  <button
+                                    onClick={fetchAiRecommendedVideos}
+                                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                                  >
+                                    다시 시도
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </TabsContent>
                         </div>
-                      </div>
+                      </Tabs>
+                    ) : (
+                      <div className="space-y-8">
+                        {/* 프로필 보기 버튼 */}
+                        <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl p-8">
+                          <div className="text-center space-y-4">
+                            <h3 className="text-xl font-semibold text-gray-800">
+                              이 이미지의 원본 프로필
+                            </h3>
+                            <p className="text-gray-600">
+                              이 이미지를 가져온 프로필을 방문하여 더 많은 관심사를 발견해보세요
+                            </p>
+                            <Button
+                              onClick={handleVisitProfile}
+                              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-4 rounded-full text-lg font-semibold shadow-lg transform transition-all duration-300 hover:scale-105"
+                            >
+                              프로필 방문하기
+                            </Button>
+                          </div>
+                        </div>
 
-                      {/* 추천 영상 섹션 */}
-                      <div className="bg-gray-50 rounded-xl p-6">
-                        <h3 className="text-xl font-semibold mb-6 text-gray-800">관련된 추천 영상</h3>
-                        <div className="grid gap-6">
-                          {image.relatedVideos.map((video, idx) => (
-                            <div key={idx} className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow">
-                              <div className="relative pt-[56.25%]">
-                                <iframe
-                                  className="absolute inset-0 w-full h-full"
-                                  src={`https://www.youtube.com/embed/${video.embedId}`}
-                                  title={video.title}
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                />
-                              </div>
-                              <div className="p-4">
-                                <h4 className="font-medium text-gray-900 line-clamp-2">{video.title}</h4>
-                                <div className="mt-2 flex items-center gap-2">
-                                  {watchedVideos.includes(video.embedId) ? (
-                                    <span className="inline-flex items-center text-green-600 text-sm">
-                                      <CheckCircle2 className="w-4 h-4 mr-1" />
-                                      시청 완료
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-500 text-sm">아직 시청하지 않음</span>
-                                  )}
+                        {/* 추천 영상 섹션 */}
+                        <div className="bg-gray-50 rounded-xl p-6">
+                          <h3 className="text-xl font-semibold mb-6 text-gray-800">관련된 추천 영상</h3>
+                          <div className="grid gap-6">
+                            {image.relatedVideos.map((video, idx) => (
+                              <div key={idx} className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow">
+                                <div className="relative pt-[56.25%]">
+                                  <iframe
+                                    className="absolute inset-0 w-full h-full"
+                                    src={`https://www.youtube.com/embed/${video.embedId}`}
+                                    title={video.title}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                </div>
+                                <div className="p-4">
+                                  <h4 className="font-medium text-gray-900 line-clamp-2">{video.title}</h4>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    {watchedVideos.includes(video.embedId) ? (
+                                      <span className="inline-flex items-center text-green-600 text-sm">
+                                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                                        시청 완료
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500 text-sm">아직 시청하지 않음</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1701,11 +1700,11 @@ ${imageData.map((image: any, index: number) => `
           {!isSearchMode && (
             <div className="absolute z-30 pl-8 max-w-[600px] space-y-6">
               <div className="flex items-center justify-between">
-                <h1 className="text-5xl font-bold tracking-tight">
+                <h1 className="text-3xl font-bold tracking-tight">
                   {profile.nickname ? `${profile.nickname}의 무드보드` : 'My 무드보드'}
                 </h1>
               </div>
-              <div className="text-gray-500 text-lg leading-relaxed mt-4">
+              <div className="text-gray-500 text-base leading-relaxed mt-2">
                 {profile.description || '나만의 알고리즘 프로필을 생성해보세요.'}
               </div>
               <div className="flex gap-4">
