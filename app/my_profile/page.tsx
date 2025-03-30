@@ -761,6 +761,7 @@ function DraggableImage({
             transition: 'all 0.3s ease-in-out',
             top: '0px',
             right: '-80px'
+            
           }}
         >
           <div className="flex items-center justify-between p-4 border-b bg-white">
