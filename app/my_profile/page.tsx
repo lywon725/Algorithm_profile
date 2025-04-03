@@ -99,6 +99,9 @@ type DraggableImageProps = {
   isSelected: boolean;
   isSearchMode: boolean;
   onImageDelete: (id: string) => void;
+  showDetails: boolean;
+  selectedImage: ImageData | null;
+  setShowDetails: (show: boolean) => void;
 };
 
 function DraggableImage({ 
@@ -113,6 +116,9 @@ function DraggableImage({
   isSelected,
   isSearchMode,
   onImageDelete,
+  showDetails,
+  selectedImage,
+  setShowDetails,
 }: DraggableImageProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: image.id,
@@ -127,7 +133,6 @@ function DraggableImage({
   const [isLoadingAiVideos, setIsLoadingAiVideos] = useState(false);
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -377,7 +382,8 @@ function DraggableImage({
   // 이미지 클릭 핸들러 추가
   const handleImageClick = () => {
     if (!isEditing) {
-      onImageSelect(image); // 부모 컴포넌트에 선택된 이미지 전달
+      onImageSelect(image);
+      setShowDetails(true);
     }
   };
 
@@ -508,7 +514,7 @@ function DraggableImage({
                   if (isEditing || isSearchMode) {
                     e.preventDefault();
                   } else {
-                    setShowDetails(true);
+                    handleImageClick();
                   }
                 }}
               >
@@ -523,7 +529,6 @@ function DraggableImage({
                     alt={image.main_keyword}
                     className={`w-full h-full object-cover shadow-lg transition-transform duration-300 ${!isEditing && isSearchMode ? 'group-hover:scale-105' : ''}`}
                     onClick={(e) => {
-                      console.log('이미지 정보:', image);
                       e.stopPropagation();
                       if (!isEditing && isSearchMode) {
                         handleImageClick();
@@ -752,7 +757,7 @@ function DraggableImage({
       </Dialog>
 
       {/* 드래그 가능한 상세 정보 창 */}
-      {showDetails && (
+      {showDetails && selectedImage && (
         <div 
           className="fixed top-0 right-0 w-[400px] h-[calc(100vh-150px)] bg-white shadow-xl overflow-hidden transition-all duration-300"
           style={{
@@ -761,11 +766,10 @@ function DraggableImage({
             transition: 'all 0.3s ease-in-out',
             top: '0px',
             right: '-80px'
-            
           }}
         >
           <div className="flex items-center justify-between p-4 border-b bg-white">
-            <h2 className="text-base sm:text-lg font-semibold">{image.main_keyword}</h2>
+            <h2 className="text-base sm:text-lg font-semibold">{selectedImage.main_keyword}</h2>
             <Button 
               variant="ghost" 
               size="icon" 
@@ -779,14 +783,14 @@ function DraggableImage({
             <div className="flex flex-col w-full mx-auto pb-8">
               <div className="relative w-full h-[150px] sm:h-[300px] flex-shrink-0">
                 <img
-                  src={image.src}
-                  alt={image.main_keyword}
+                  src={selectedImage.src}
+                  alt={selectedImage.main_keyword}
                   className="w-full h-full object-cover rounded-lg"
                 />
                 
                 <div className="absolute top-4 right-4">
                   <span className="px-2 sm:px-3 py-1 sm:py-1.5 bg-black/50 backdrop-blur-md rounded-full text-white text-xs sm:text-sm font-medium">
-                    {image.category}
+                    {selectedImage.category}
                   </span>
                 </div>
               </div>
@@ -794,17 +798,21 @@ function DraggableImage({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                   <div className="bg-emerald-50 rounded-xl p-2 sm:p-3 text-center">
                     <h4 className="text-xs font-medium text-emerald-600 mb-0.5 sm:mb-1">메인 키워드</h4>
-                    <p className="text-xs sm:text-sm font-bold text-emerald-900">#{image.main_keyword}</p>
+                    <p className="text-xs sm:text-sm font-bold text-emerald-900">#{selectedImage.main_keyword}</p>
                   </div>
                   
                   <div className="bg-purple-50 rounded-xl p-2 sm:p-3 text-center">
                     <h4 className="text-xs font-medium text-purple-600 mb-0.5 sm:mb-1">감성/분위기</h4>
-                    <p className="text-xs sm:text-sm font-bold text-purple-900">#{image.mood_keyword}</p>
+                    <p className="text-xs sm:text-sm font-bold text-purple-900">#{selectedImage.mood_keyword}</p>
                   </div>
                   
                   <div className="bg-blue-50 rounded-xl p-2 sm:p-3 text-center">
                     <h4 className="text-xs font-medium text-blue-600 mb-0.5 sm:mb-1">서브 키워드</h4>
-                    <p className="text-xs sm:text-sm font-bold text-blue-900">#{image.sub_keyword}</p>
+                    <p className="text-xs sm:text-sm font-bold text-blue-900">#{image.keywords.map((keyword, idx) => (
+                      <span key={idx} className="...">
+                        #{keyword}
+                      </span>
+                    ))}</p>
                   </div>
                 </div>
 
@@ -812,54 +820,42 @@ function DraggableImage({
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-semibold text-gray-800">관심도</h4>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      image.sizeWeight >= 1.2 ? "bg-red-100 text-red-700" :
-                      image.sizeWeight >= 0.8 ? "bg-yellow-100 text-yellow-700" :
+                      (selectedImage.sizeWeight || image.sizeWeight) >= 0.3 ? "bg-red-100 text-red-700" :
+                      (selectedImage.sizeWeight || image.sizeWeight) >= 0.1 ? "bg-yellow-100 text-yellow-700" :
                       "bg-blue-100 text-blue-700"
                     }`}>
-                      {image.sizeWeight >= 1.2 ? "강" :
-                      image.sizeWeight >= 0.8 ? "중" : "약"}
+                      {(selectedImage.sizeWeight || image.sizeWeight) >= 0.3 ? "강" :
+                      (selectedImage.sizeWeight || image.sizeWeight) >= 0.1 ? "중" : "약"}
                     </span>
                   </div>
                   
                   <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
                     <div 
                       className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
-                        image.sizeWeight >= 1.2 ? "bg-gradient-to-r from-red-400 to-red-500" :
-                        image.sizeWeight >= 0.8 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
+                        (selectedImage.sizeWeight || image.sizeWeight) >= 0.3 ? "bg-gradient-to-r from-red-400 to-red-500" :
+                        (selectedImage.sizeWeight || image.sizeWeight) >= 0.1 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
                         "bg-gradient-to-r from-blue-400 to-blue-500"
                       }`}
-                      style={{ width: `${Math.min(image.sizeWeight * 50, 100)}%` }}
+                      style={{ width: `${Math.min((selectedImage.sizeWeight || image.sizeWeight) * 200, 100)}%` }}
                     />
                   </div>
 
                   <p className="mt-2 text-xs text-gray-600">
-                    {image.sizeWeight >= 1.2 ? "이 주제에 대한 높은 관심도를 보입니다" :
-                    image.sizeWeight >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
+                    {(selectedImage.sizeWeight || image.sizeWeight) >= 1.2 ? "이 주제에 대한 높은 관심도를 보입니다" :
+                    (selectedImage.sizeWeight || image.sizeWeight) >= 0.8 ? "이 주제에 대해 보통 수준의 관심을 가지고 있습니다" :
                     "이 주제에 대해 가볍게 관심을 두고 있습니다"}
                   </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-xl p-4">
                   <h4 className="text-sm font-semibold mb-2">이미지 설명</h4>
-                  <p className="text-sm text-gray-700">{image.description}</p>
+                  <p className="text-sm text-gray-700">{selectedImage.description}</p>
                 </div>
 
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">관련 키워드</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {image.keywords.map((keyword, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-xs font-medium hover:bg-gray-200 transition-colors"
-                      >
-                        #{keyword}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                
 
                 <div className="space-y-6">
-                  {!image.desired_self ? (
+                  {!(selectedImage.desired_self || image.desired_self) ? (
                     <Tabs defaultValue="history" className="w-full">
                       <div className="bg-gray-70/70 rounded-lg">
                         <TabsList className="w-full grid grid-cols-2 py-0">
@@ -870,7 +866,7 @@ function DraggableImage({
                         
                         <TabsContent value="history" className="px-4 pb-4">
                           <div className="grid gap-6">
-                            {image.relatedVideos.map((video, idx) => (
+                            {(selectedImage.relatedVideos || image.relatedVideos).map((video, idx) => (
                               <div key={idx} className="space-y-2">
                                 <h5 className="text-sm font-medium text-gray-800 mb-1">{video.title}</h5>
                                 <div 
@@ -947,7 +943,7 @@ function DraggableImage({
                             ) : (
                               <div className="text-center py-8">
                                 <p className="text-sm text-gray-500">
-                                  '{image.main_keyword}' 키워드에 대한 AI 추천 영상을 가져올 수 없습니다.
+                                  '{selectedImage.main_keyword}' 키워드에 대한 AI 추천 영상을 가져올 수 없습니다.
                                 </p>
                                 <button
                                   onClick={fetchAiRecommendedVideos}
@@ -985,7 +981,7 @@ function DraggableImage({
                       <div className="bg-gray-50 rounded-xl p-4">
                         <h3 className="text-sm font-semibold mb-4 text-gray-800">관련된 추천 영상</h3>
                         <div className="grid gap-4">
-                          {image.relatedVideos.map((video, idx) => (
+                          {(selectedImage.relatedVideos || image.relatedVideos).map((video, idx) => (
                             <div key={idx} className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow">
                               <div className="relative pt-[56.25%]">
                                 <iframe
@@ -1086,6 +1082,8 @@ export default function MyProfilePage() {
   const [histories, setHistories] = useState<HistoryData[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const placeholderImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3E%3Crect width='300' height='200' fill='%23cccccc'/%3E%3Ctext x='50%25' y='50%25' font-size='18' text-anchor='middle' alignment-baseline='middle' font-family='Arial, sans-serif' fill='%23666666'%3E이미지를 찾을 수 없습니다%3C/text%3E%3C/svg%3E";
 
   const [images, setImages] = useState<ImageData[]>(() => {
@@ -1115,7 +1113,6 @@ export default function MyProfilePage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const [selectedImages, setSelectedImages] = useState<ImageData[]>([]);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const router = useRouter();
@@ -1560,7 +1557,7 @@ ${imageData.map((image: any, index: number) => `
   }, []); // 빈 의존성 배열로 컴포넌트 마운트 시 한 번만 실행
 
   return (
-    <main className={`fixed inset-0 overflow-y-auto transition-colors duration-500 ${bgColor}`}>
+    <main className={`fixed inset-0 overflow-y-auto transition-colors duration-500 ${bgColor} pt-[60px]`}>
       {/* 생성 중 다이얼로그 */}
       <Dialog open={showGeneratingDialog} onOpenChange={setShowGeneratingDialog}>
         <DialogContent className="sm:max-w-[500px] bg-black/95 border-none text-white">
@@ -1767,6 +1764,9 @@ ${imageData.map((image: any, index: number) => `
                     isSelected={selectedImages.some(img => img.id === image.id)}
                     isSearchMode={isSearchMode}
                     onImageDelete={handleImageDelete}
+                    showDetails={showDetails}
+                    selectedImage={selectedImage}
+                    setShowDetails={setShowDetails}
                   />
                 </div>
               ))}
