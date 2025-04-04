@@ -133,13 +133,18 @@ export default function Home() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const savedHistory = localStorage.getItem('watchHistory');
-        setWatchHistory(savedHistory ? JSON.parse(savedHistory) : []);
+        // watchHistory 데이터 로드
+        const savedHistoryStr = localStorage.getItem('watchHistory');
+        const savedHistory = savedHistoryStr ? JSON.parse(savedHistoryStr) : [];
+        setWatchHistory(savedHistory);
 
-        const savedClusters = localStorage.getItem('watchClusters');
-        setClusters(savedClusters ? JSON.parse(savedClusters) : []);
+        // clusters 데이터 로드
+        const savedClustersStr = localStorage.getItem('watchClusters');
+        const savedClusters = savedClustersStr ? JSON.parse(savedClustersStr) : [];
+        setClusters(savedClusters);
       } catch (error) {
         console.error('로컬 스토리지 데이터 로드 중 오류 발생:', error);
+        // 오류 발생 시 빈 배열로 초기화
         setWatchHistory([]);
         setClusters([]);
       }
