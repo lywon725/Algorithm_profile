@@ -390,10 +390,10 @@ const parseWatchHistory = async (file: File) => {
 
     alert(`${keywordSuccessCount}개의 시청기록이 성공적으로 처리되었습니다! (총 ${totalVideos}개 중)`);
 
-    // 저장된 시청 기록 분석
     if (finalHistory.length > 0) {
-      const clusters = await analyzeKeywordsWithOpenAI(finalHistory);
-      localStorage.setItem('watchClusters', JSON.stringify(clusters));
+      // 자동으로 STEP2. 클러스터링 분석
+      //const clusters = await analyzeKeywordsWithOpenAI(finalHistory);
+      //localStorage.setItem('watchClusters', JSON.stringify(clusters));
 
       console.log('분석 완료:', {
         totalVideos: finalHistory.length,
@@ -559,18 +559,17 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
   return successCount;
 };
 
-  // 클러스터링 버튼 핸들러
+  // 새로운 클러스터링 분석 버튼 핸들러
   const handleCluster = async () => {
     try {
       setIsLoading(true);
-    console.log('🎯 클러스터링 시작...');
-    
+      // STEP2>> 클러스터링 분석 함수
       const newClusters = await analyzeKeywordsWithOpenAI(watchHistory);
-    console.log('클러스터링 결과:', newClusters);
-    
-    if (!newClusters || newClusters.length === 0) {
-      throw new Error('클러스터링 결과가 없습니다.');
-    }
+      console.log('클러스터링 결과:', newClusters);
+      
+      if (!newClusters || newClusters.length === 0) {
+        throw new Error('클러스터링 결과가 없습니다.');
+      }
 
     // 새로운 분석 결과 생성
     const newAnalysis = {
@@ -586,8 +585,8 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
     const updatedAnalyses = [...savedAnalyses, newAnalysis];
 
     // 저장
-    localStorage.setItem('analysisHistory', JSON.stringify(updatedAnalyses));
-      localStorage.setItem('watchClusters', JSON.stringify(newClusters));
+    localStorage.setItem('analysisHistory', JSON.stringify(updatedAnalyses)); //히스토리 (모든 분석 기록)
+    localStorage.setItem('watchClusters', JSON.stringify(newClusters)); //현재 상태 (현재 분석 결과)
     
     // 상태 업데이트
     setAnalysisHistory(updatedAnalyses);
@@ -602,14 +601,14 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
       analysisHistory: updatedAnalyses.length
     });
 
-    // 클러스터 이미지 가져오기
+    // STEP3>> 클러스터 이미지 검색하기
     const clusterImagesData: Record<number, any> = {};
     for (let i = 0; i < newClusters.length; i++) {
       const image = await searchClusterImage(newClusters[i], true);
       clusterImagesData[i] = image;
     }
 
-    // ImageData 형식으로 변환
+    // ImageData 형식으로 변환(최종 단위 이미지 데이터)
     const profileImages = newClusters.map((cluster: any, index: number) => {
       const imageUrl = clusterImagesData[index]?.url || placeholderImage;
       return transformClusterToImageData(cluster, index, imageUrl);
@@ -626,8 +625,8 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
     }
   };
 
-  // STEP3>> 통합된 키워드 분석 및 클러스터링 함수
-  const analyzeKeywordsWithOpenAI = async (watchHistory: WatchHistoryItem[]): Promise<Cluster[]> => {
+  // STEP3>> 클러스터링 함수
+  const analyzeKeywordsWithOpenAI = async (watchHistory: WatchHistoryItem[]) => {
     try {
       console.log('클러스터링 분석 시작...');
       const allKeywords = new Set(watchHistory.flatMap(item => item.keywords));
@@ -648,38 +647,17 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
         .sort(([, a], [, b]) => b - a)
         .map(([keyword]) => keyword);
 
-      // 3. 키워드를 50~100개씩 배치로 나누기
-      const batchSize = 100;
-      const keywordBatches: string[][] = [];
-      for (let i = 0; i < sortedKeywords.length; i += batchSize) {
-        keywordBatches.push(sortedKeywords.slice(i, i + batchSize));
-      }
+      // 3. 각 키워드별 대표 영상 1개만 선택하여 토큰 사용량 감소
+      const keywordToVideos: { [key: string]: string[] } = {};
+      sortedKeywords.forEach(keyword => {
+        const videos = watchHistory
+          .filter(item => item.keywords && item.keywords.includes(keyword))
+          .slice(0, 1)
+          .map(item => item.title);
+        keywordToVideos[keyword] = videos;
+      });
 
-      console.log(`배치 처리 시작: 총 ${keywordBatches.length}개 배치`);
-
-      // 4. 각 배치 분석
-      const allClusters: Cluster[] = [];
-      const analysisResult: AnalysisResult = {
-        timestamp: new Date().toISOString(),
-        totalClusters: 0,
-        clusters: [] as Array<Cluster>
-      };
-
-      for (let i = 0; i < keywordBatches.length; i++) {
-        const batchKeywords = keywordBatches[i];
-        console.log(`배치 ${i + 1}/${keywordBatches.length} 처리 중... (${batchKeywords.length}개 키워드)`);
-
-        // 각 키워드별 대표 영상 1개만 선택하여 토큰 사용량 감소
-        const keywordToVideos: { [key: string]: string[] } = {};
-        batchKeywords.forEach(keyword => {
-          const videos = watchHistory
-            .filter(item => item.keywords && item.keywords.includes(keyword))
-            .slice(0, 1)
-            .map(item => item.title);
-          keywordToVideos[keyword] = videos;
-        });
-
-        const prompt = `
+      const prompt = `
 다음 YouTube 시청 기록 키워드들을 분석하여 의미 있는 그룹으로 분류해주세요.
 
 키워드 데이터:
@@ -693,7 +671,6 @@ ${Object.entries(keywordToVideos).map(([keyword, titles]) =>
 3. 특정 인물이 포착될 경우 해당 인물 중심으로 그룹화
 4. 각 그룹은 클러스터링된 키워드와 관련된 최소 3개 이상의 연관된 영상을 포함 [필수조건]
 
-
 응답 형식:
 CLUSTER_START
 대표키워드: [그룹 대표 키워드]
@@ -704,84 +681,72 @@ CLUSTER_START
 관련영상: [관련 영상 id]
 CLUSTER_END`;
 
-    const completion = await openai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "gpt-3.5-turbo",
-          temperature: 0.7,
-          max_tokens: 2000,
-        });
+      const completion = await openai.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "gpt-3.5-turbo",
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
 
-        console.log(`배치 ${i + 1} API 응답 받음`);
-        console.log('API 응답 내용:', completion.choices[0].message.content);
-        console.log(`배치 ${i + 1} 토큰 사용량:
-          - Prompt: ${completion.usage?.prompt_tokens || 0}
-          - Completion: ${completion.usage?.completion_tokens || 0}
-          - Total: ${completion.usage?.total_tokens || 0}
-        `);
+      console.log('API 응답 받음');
+      console.log('API 응답 내용:', completion.choices[0].message.content);
+      console.log(`토큰 사용량:
+        - Prompt: ${completion.usage?.prompt_tokens || 0}
+        - Completion: ${completion.usage?.completion_tokens || 0}
+        - Total: ${completion.usage?.total_tokens || 0}
+      `);
 
-        const response = completion.choices[0].message.content || '';
-        const batchClusters: Array<Cluster> = response.split('CLUSTER_START')
-          .slice(1)
-          .map((clusterText: string): Cluster => {
-            const clusterTextContent = clusterText.split('CLUSTER_END')[0].trim();
-            const lines = clusterTextContent.split('\n');
-            
-            const parsedData = lines.reduce((acc: any, line) => {
-              const [key, value] = line.split(': ').map(s => s.trim());
-              const keyMap: { [key: string]: string } = {
-                '대표키워드': 'main_keyword',
-                '카테고리': 'category',
-                '관심영역': 'description',
-                '핵심키워드': 'keywords',
-                '감성태도': 'mood_keyword',
-                '관련영상': 'related_videos'              };
-              if (keyMap[key]) {
-                acc[keyMap[key]] = value || '';
-              }
-      return acc;
-    }, {});
-
-            const relatedKeywords = parsedData.keywords ? 
-              parsedData.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : 
-              [];
-
-            const relatedVideos = watchHistory.filter(item => 
-              item.keywords && Array.isArray(item.keywords) && 
-              item.keywords.some(k => relatedKeywords.includes(k))
-            );
-
-      return {
-              main_keyword: parsedData.main_keyword || '',
-              category: parsedData.category || '기타',
-              description: parsedData.description || '',
-              keywords: relatedKeywords,
-              mood_keyword: parsedData.mood_keyword || '',
-              strength: relatedVideos.length,
-              related_videos: relatedVideos
+      const response = completion.choices[0].message.content || '';
+      const clusters: Array<Cluster> = response.split('CLUSTER_START')
+        .slice(1)
+        .map((clusterText: string): Cluster => {
+          const clusterTextContent = clusterText.split('CLUSTER_END')[0].trim();
+          const lines = clusterTextContent.split('\n');
+          
+          const parsedData = lines.reduce((acc: any, line) => {
+            const [key, value] = line.split(': ').map(s => s.trim());
+            const keyMap: { [key: string]: string } = {
+              '대표키워드': 'main_keyword',
+              '카테고리': 'category',
+              '관심영역': 'description',
+              '핵심키워드': 'keywords',
+              '감성태도': 'mood_keyword',
+              '관련영상': 'related_videos'
             };
-          })
-          .filter((cluster): cluster is Cluster => 
-            cluster.related_videos && cluster.related_videos.length >= 3
+            if (keyMap[key]) {
+              acc[keyMap[key]] = value || '';
+            }
+            return acc;
+          }, {});
+
+          const relatedKeywords = parsedData.keywords ? 
+            parsedData.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : 
+            [];
+
+          const relatedVideos = watchHistory.filter(item => 
+            item.keywords && Array.isArray(item.keywords) && 
+            item.keywords.some(k => relatedKeywords.includes(k))
           );
 
-        // 배치 클러스터를 analysisResult에 추가
-        analysisResult.clusters.push(...batchClusters);
-        analysisResult.totalClusters = analysisResult.clusters.length;
-        console.log(analysisResult);
-        
-        console.log(`배치 ${i + 1} 번째처리 완료: ${analysisResult.clusters.length}개 클러스터 생성`);
+          return {
+            main_keyword: parsedData.main_keyword || '',
+            category: parsedData.category || '기타',
+            description: parsedData.description || '',
+            keywords: relatedKeywords,
+            mood_keyword: parsedData.mood_keyword || '',
+            strength: relatedVideos.length,
+            related_videos: relatedVideos
+          };
+        })
+        .filter((cluster): cluster is Cluster => 
+          cluster.related_videos && cluster.related_videos.length >= 3
+        );
 
-        // API 호출 간 딜레이
-        if (i < keywordBatches.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      return analysisResult.clusters;
+      console.log(`클러스터링 완료: ${clusters.length}개 클러스터 생성`);
+      return clusters;
 
     } catch (error) {
       console.error('❌ 클러스터링 실패:', error);
-        console.groupEnd();
       return [];
     }
   };
