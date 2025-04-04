@@ -131,11 +131,19 @@ export default function Home() {
 
   // useEffect 추가
   useEffect(() => {
-    // localStorage에서 데이터 로드
-    const savedHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
-    setWatchHistory(savedHistory);
-    const savedClusters = JSON.parse(localStorage.getItem('watchClusters') || '[]');
-    setClusters(savedClusters);
+    if (typeof window !== 'undefined') {
+      try {
+        const savedHistory = localStorage.getItem('watchHistory');
+        setWatchHistory(savedHistory ? JSON.parse(savedHistory) : []);
+
+        const savedClusters = localStorage.getItem('watchClusters');
+        setClusters(savedClusters ? JSON.parse(savedClusters) : []);
+      } catch (error) {
+        console.error('로컬 스토리지 데이터 로드 중 오류 발생:', error);
+        setWatchHistory([]);
+        setClusters([]);
+      }
+    }
   }, []);
 
   // 데이터 마이그레이션을 위한 useEffect 추가
