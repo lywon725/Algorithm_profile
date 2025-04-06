@@ -34,16 +34,25 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // watchHistory 타입 정의 수정
 type WatchHistoryItem = {
+  //STEP1-0>>파싱
   title: string;
   videoId: string;
-  keywords: string[];
-  tags?: string[];
-  timestamp?: string;
   url?: string;
-  date?: any;
   channelName?: string;
-  description?: string;
+  date?: string;
+
+  //STEP1-1>>youtube.data.api 
   categoryId?: string;
+  tags?: string[];
+  description?: string;
+  timestamp?: string; //update한 시간 (무드보드 분석을 한 날짜)
+
+  //STEP1-2>>openai 키워드 추출
+  keywords: string[];
+
+  // 사이트에서의 시청 기록 
+  is_watched: boolean; //false=>사이트에서 시청하지 않음, true=>사이트에서 시청함
+  watched_at: string; //시청한 시간
 };
 
 // 클러스터 타입 수정
@@ -81,18 +90,12 @@ type ClusterImage = {
   };
 };
 
-// keywordFrequency 타입 정의 추가
-type KeywordFrequency = {
-  [key: string]: number;
-};
 
 // 네이버 API 설정
 const NAVER_CLIENT_ID = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
 const NAVER_CLIENT_SECRET = process.env.NEXT_PUBLIC_NAVER_CLIENT_SECRET;
 
-type KeywordToVideos = {
-  [key: string]: string[];
-};
+
 
 // Vision 검색 결과 타입 정의
 interface VisionSearchResult {
@@ -197,52 +200,48 @@ export default function Home() {
     }
   }, []);
 
-  // YouTube 동영상 ID 추출 함수
-  const extractVideoId = (url: string) => {
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[7].length === 11) ? match[7] : null;
-  };
 
-  // STEP1-1>>YouTube API를 통해 description, tags, categoryId 정보 가져오기
-  const fetchVideoInfo = async (videoId: string) => {
-    try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
-      );
-      
-      if (!response.ok) {
-        throw new Error('YouTube API 요청 실패');
-      }
+  
 
-      const data = await response.json();
-      
-      if (data.items && data.items.length > 0) {
-        const videoInfo = data.items[0].snippet;
-        
-        // 로컬 스토리지에 저장
-        const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
-        const updatedHistory = [...currentHistory, {
-          videoId,
-          title: videoInfo.title,
-          description: videoInfo.description,
-          tags: videoInfo.tags || [],
-          categoryId: videoInfo.categoryId,
-          timestamp: new Date().toISOString()
-        }];
-        localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
-        setWatchHistory(updatedHistory);
-
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('비디오 정보 가져오기 실패:', error);
-      throw error;
+// STEP1-1>>YouTube API를 통해 description, tags, categoryId 정보 가져오기
+const fetchVideoInfo = async (videoId: string) => {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+    );
+    
+    if (!response.ok) {
+      throw new Error('YouTube API 요청 실패');
     }
-  };
 
-// STEP1-0>> HTML 파일 파싱함수 안에서 and youtube api, openai 키워드 추출
+    const data = await response.json();
+    
+    if (data.items && data.items.length > 0) {
+      const videoInfo = data.items[0].snippet;
+      
+      // 로컬 스토리지에 저장
+      const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+      const updatedHistory = [...currentHistory, {
+        videoId,
+        title: videoInfo.title,
+        description: videoInfo.description,
+        tags: videoInfo.tags || [],
+        categoryId: videoInfo.categoryId,
+        timestamp: new Date().toISOString()
+      }];
+      localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
+      setWatchHistory(updatedHistory);
+
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('비디오 정보 가져오기 실패:', error);
+    throw error;
+  }
+};
+
+// STEP1-0>> HTML 파일 파싱시작! 이 함수 안에서 and STEP1-1>>youtube api, STEP1-2>>openai 키워드 추출 함수 호출
 const parseWatchHistory = async (file: File) => {
   try {
     const text = await file.text();
@@ -268,11 +267,9 @@ const parseWatchHistory = async (file: File) => {
           const channelElement = item.querySelector('a:nth-child(3)');
           const channelName = channelElement?.textContent || '';
 
-          const dateText = item.textContent || '';
-          const dateMatch = dateText.match(/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}/);
-          if (!dateMatch) return null;
-
-          const date = new Date(dateMatch[0].replace(/\./g, '-'));
+          // 날짜 정보 추출
+          const dateElement = item.querySelector('.date');
+          const date = dateElement?.textContent ? new Date(dateElement.textContent) : new Date();
 
           // 광고 영상 필터링
           const isAd = (
@@ -292,8 +289,8 @@ const parseWatchHistory = async (file: File) => {
             title,
             videoId,
             channelName,
-            date,
             url: `https://youtube.com/watch?v=${videoId}`,
+            date: date.toISOString(),
             keywords: [] as string[]
           };
         } catch (error) {
@@ -307,9 +304,9 @@ const parseWatchHistory = async (file: File) => {
       throw new Error('시청기록을 찾을 수 없습니다.');
     }
 
-    // 날짜별로 그룹화하고 각 날짜에서 30개씩만 선택
+    // 날짜별로 그룹화
     const groupedByDate = watchHistory.reduce((acc: { [key: string]: any[] }, item) => {
-      const dateStr = item.date.toISOString().split('T')[0];
+      const dateStr = new Date(item.date).toISOString().split('T')[0];
       if (!acc[dateStr]) {
         acc[dateStr] = [];
       }
@@ -317,26 +314,22 @@ const parseWatchHistory = async (file: File) => {
       return acc;
     }, {});
 
-    // 날짜별로 정렬하고 최상단 일주일만 선택
+    // 날짜별로 정렬하고 최근 200개만 선택
     const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-    const topWeekDates = sortedDates.slice(0, 2);
-
-    // 각 날짜에서 30개씩만 선택하고 병합
-    const recentWatchHistory = topWeekDates
+    const recentWatchHistory = sortedDates
       .map(dateStr => 
         groupedByDate[dateStr]
-          .sort((a, b) => b.date.getTime() - a.date.getTime())
-          .slice(0, 30)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       )
       .flat()
-      .sort((a, b) => b.date.getTime() - a.date.getTime());
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 200); // 최근 200개만 선택
 
     console.log('파싱된 전체 항목 수:', watchItems.length);
     console.log('처리할 시청기록 수:', recentWatchHistory.length);
 
-    // STEP1-1. 각 비디오 youtube api로 description, tags, categoryId 정보 가져오기
     let apiSuccessCount = 0;
-    const batchSize = 5;
+    const batchSize = 100;
     const totalVideos = recentWatchHistory.length;
 
     console.log('처리할 총 비디오 수:', totalVideos);
@@ -351,6 +344,7 @@ const parseWatchHistory = async (file: File) => {
           batch.map(async (item) => {
             try {
               console.log(`비디오 처리 시작: ${item.videoId}`);
+              // STEP1-1. fetchVideoInfo 함수 호출하여 각 비디오 youtube api로 description, tags, categoryId 정보 가져오기
               const success = await fetchVideoInfo(item.videoId);
               console.log(`비디오 처리 결과: ${item.videoId} - ${success ? '성공' : '실패'}`);
               return success;
@@ -377,7 +371,7 @@ const parseWatchHistory = async (file: File) => {
       }
     }
 
-    // STEP1-2. OpenAI로 키워드 추출
+    // STEP1-2. extractVideoKeywords 함수 호출하여 OpenAI로 키워드 추출
     console.log('키워드 추출 시작...');
     const savedHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
     const keywordSuccessCount = await extractVideoKeywords(savedHistory);
@@ -391,7 +385,7 @@ const parseWatchHistory = async (file: File) => {
     alert(`${keywordSuccessCount}개의 시청기록이 성공적으로 처리되었습니다! (총 ${totalVideos}개 중)`);
 
     if (finalHistory.length > 0) {
-      // 자동으로 STEP2. 클러스터링 분석
+      // 자동으로 STEP2. 클러스터링 분석 (수정필요)
       //const clusters = await analyzeKeywordsWithOpenAI(finalHistory);
       //localStorage.setItem('watchClusters', JSON.stringify(clusters));
 
@@ -462,7 +456,7 @@ const parseWatchHistory = async (file: File) => {
   };
 // STEP1-2>> 영상 키워드 추출 함수
 const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
-  const batchSize = 50;
+  const batchSize = 100;
   let successCount = 0;
   const totalVideos = watchHistory.length;
 
@@ -473,18 +467,17 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
     console.log(`배치 ${Math.floor(i/batchSize) + 1} 처리 시작:`, batch);
 
     try {
-      const results = await Promise.all(
-        batch.map(async (item) => {
-          try {
-            console.log(`OpenAI 영상별 키워드 생성 시작: ${item.videoId}`);
-            const prompt = `
+      // 배치의 모든 비디오 정보를 하나의 프롬프트로 구성
+      const batchPrompt = `
 당신은 YouTube 영상 콘텐츠 분석 전문가입니다. 
-다음 영상의 정보를 분석하여 가장 적절한 키워드를 추출해주세요.
+다음 영상들의 정보를 분석하여 각각 가장 적절한 키워드를 추출해주세요.
 
-[입력 정보]
+${batch.map((item, index) => `
+[비디오 ${index + 1}]
 제목: ${item.title}
 설명: ${item.description?.slice(0, 200)}
 태그: ${item.tags ? item.tags.join(', ') : '없음'}
+`).join('\n')}
 
 [추출 기준]
 1. 주제 관련성: 영상의 핵심 주제를 대표하는 고유명사 키워드
@@ -502,41 +495,47 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
 응답 형식: 키워드1, 키워드2, 키워드3, 키워드4, 키워드5
 `;
 
-            const completion = await openai.chat.completions.create({
-              messages: [{ role: "user", content: prompt }],
-              model: "gpt-3.5-turbo",
-              temperature: 0.7,
-            });
+      const completion = await openai.chat.completions.create({
+        messages: [{ role: "user", content: batchPrompt }],
+        model: "gpt-3.5-turbo",
+        temperature: 0.7,
+        max_tokens: 8000
+      });
 
-            const response = completion.choices[0].message.content?.trim() || '';
-            const keywords = response.split(',').map(k => k.trim());
+      // 토큰 사용량 출력
+      console.log(`배치 ${Math.floor(i/batchSize) + 1} 토큰 사용량:`, {
+        prompt_tokens: completion.usage?.prompt_tokens,
+        completion_tokens: completion.usage?.completion_tokens,
+        total_tokens: completion.usage?.total_tokens,
+        videos_in_batch: batch.length
+      });
 
-            // watchHistory 업데이트
-            const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
-            const updatedHistory = currentHistory.map((video: WatchHistoryItem) => {
-              if (video.videoId === item.videoId) {
-                return { ...video, keywords };
-              }
-              return video;
-            });
+      const response = completion.choices[0].message.content?.trim() || '';
+      const videoKeywords = response.split('\n').reduce((acc, line, index) => {
+        if (line.startsWith('비디오')) {
+          const keywords = line.split(':')[1].trim().split(',').map(k => k.trim());
+          acc[batch[index].videoId] = keywords;
+        }
+        return acc;
+      }, {} as Record<string, string[]>);
 
-            // localStorage 업데이트
-            localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
-            
-            // 상태 업데이트
-            setWatchHistory(updatedHistory);
+      // watchHistory 업데이트
+      const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+      const updatedHistory = currentHistory.map((video: WatchHistoryItem) => {
+        if (videoKeywords[video.videoId]) {
+          return { ...video, keywords: videoKeywords[video.videoId] };
+        }
+        return video;
+      });
 
-            console.log(`OpenAI 영상별 키워드 생성 결과: ${item.videoId} - 성공`, keywords);
-            return true;
-          } catch (error) {
-            console.error(`OpenAI 영상별 키워드 생성 실패 (${item.videoId}):`, error);
-            return false;
-          }
-        })
-      );
+      // localStorage 업데이트
+      localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
+      
+      // 상태 업데이트
+      setWatchHistory(updatedHistory);
 
       // 성공한 비디오 수 업데이트
-      const batchSuccessCount = results.filter(Boolean).length;
+      const batchSuccessCount = Object.keys(videoKeywords).length;
       successCount += batchSuccessCount;
       
       console.log(`배치 처리 완료: ${batchSuccessCount}개 성공 (총 ${successCount}/${totalVideos})`);
@@ -559,11 +558,11 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
   return successCount;
 };
 
-  // 새로운 클러스터링 분석 버튼 핸들러
+  // STEP2>> 새로운 클러스터링 분석 버튼 핸들러
   const handleCluster = async () => {
     try {
       setIsLoading(true);
-      // STEP2>> 클러스터링 분석 함수
+      // STEP2-1>> 클러스터링 분석 함수
       const newClusters = await analyzeKeywordsWithOpenAI(watchHistory);
       console.log('클러스터링 결과:', newClusters);
       
@@ -625,7 +624,7 @@ const extractVideoKeywords = async (watchHistory: WatchHistoryItem[]) => {
     }
   };
 
-  // STEP3>> 클러스터링 함수
+  // STEP2-1>> 클러스터링 함수
   const analyzeKeywordsWithOpenAI = async (watchHistory: WatchHistoryItem[]) => {
     try {
       console.log('클러스터링 분석 시작...');
@@ -685,7 +684,7 @@ CLUSTER_END`;
         messages: [{ role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 8000,
       });
 
       console.log('API 응답 받음');
@@ -751,7 +750,7 @@ CLUSTER_END`;
     }
   };
 
-  // STEP4>> 이미지 검색 함수 수정
+  // STEP3>> 이미지 검색 함수 수정
   const searchClusterImage = async (cluster: Cluster, forceRefresh: boolean = false): Promise<ClusterImage> => {
     if (!cluster || typeof cluster !== 'object') {
       console.error('❌ 유효하지 않은 클러스터:', cluster);

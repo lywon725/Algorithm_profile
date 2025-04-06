@@ -267,31 +267,29 @@ function DraggableImage({
     };
   }, []);
 
+  // 시청 기록 업데이트 함수
+  const updateWatchHistory = (videoId: string) => {
+    const currentHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+    const updatedHistory = currentHistory.map((item: WatchHistoryItem) => {
+      if (item.embedId === videoId) {
+        return {
+          ...item,
+          watchedOnSite: {
+            isWatched: true,
+            watchedAt: new Date()
+          }
+        };
+      }
+      return item;
+    });
+    localStorage.setItem('watchHistory', JSON.stringify(updatedHistory));
+    setWatchHistory(updatedHistory);
+  };
+
+  // 비디오 클릭 핸들러 수정
   const handleVideoClick = (video: VideoData) => {
-    // 로컬 스토리지에서 현재 시청 기록 가져오기
-    const currentHistory = localStorage.getItem('watchHistory');
-    const history = currentHistory ? JSON.parse(currentHistory) : [];
-    
-    // 이미 있는 영상인지 확인
-    const isExist = history.some((item: any) => item.embedId === video.embedId);
-    
-    if (!isExist) {
-      // 새로운 시청 기록 추가
-      const newHistory = [
-        {
-          title: video.title,
-          embedId: video.embedId,
-          timestamp: Date.now()
-        },
-        ...history
-      ];
-      
-      // 로컬 스토리지에 저장
-      localStorage.setItem('watchHistory', JSON.stringify(newHistory));
-      
-      // 시청한 영상 목록 업데이트
-      setWatchedVideos(prev => [...prev, video.embedId]);
-    }
+    setSelectedVideo(video);
+    updateWatchHistory(video.embedId);
   };
 
   const handleFrameStyleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

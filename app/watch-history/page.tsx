@@ -7,6 +7,10 @@ type WatchHistoryItem = {
   title: string;
   embedId: string;
   timestamp: number;
+  watchedOnSite?: {
+    isWatched: boolean;
+    watchedAt: number;
+  };
 };
 
 export default function WatchHistoryPage() {
@@ -19,6 +23,19 @@ export default function WatchHistoryPage() {
       setWatchHistory(JSON.parse(history));
     }
   }, []);
+
+  // 시청 여부 확인 로직 수정
+  const watchedVideos = watchHistory
+    .filter(item => item.watchedOnSite?.isWatched)
+    .map(item => item.embedId);
+
+  // 기간 필터링 함수 추가
+  const filterByDateRange = (startDate: Date, endDate: Date) => {
+    return watchHistory.filter(item => {
+      const watchedDate = new Date(item.watchedOnSite?.watchedAt || '');
+      return watchedDate >= startDate && watchedDate <= endDate;
+    });
+  };
 
   return (
     <main className="min-h-screen p-8">
@@ -42,7 +59,11 @@ export default function WatchHistoryPage() {
                 <div className="flex items-center justify-between mt-4">
                   <div className="flex items-center gap-1.5 text-green-500">
                     <CheckCircle2 className="h-4 w-4" />
-                    <span className="text-sm font-medium">시청함</span>
+                    <span className="text-xs font-medium">
+                      {watchedVideos.includes(video.embedId) 
+                        ? `시청함 (${new Date(watchHistory.find(item => item.embedId === video.embedId)?.watchedOnSite?.watchedAt || '').toLocaleString()})`
+                        : "시청안함"}
+                    </span>
                   </div>
                   <span className="text-sm text-gray-500">
                     {new Date(video.timestamp).toLocaleString('ko-KR')}
